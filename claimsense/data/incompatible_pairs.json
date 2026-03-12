@@ -70,6 +70,41 @@
       "procedure": "53.00",
       "procedure_desc": "Inguinal hernia repair",
       "reason": "Epilepsy diagnosis inconsistent with hernia surgery"
+    },
+    {
+      "diagnosis": "R07.9",
+      "diagnosis_desc": "Chest pain, unspecified",
+      "procedure": "81.54",
+      "procedure_desc": "Total knee replacement",
+      "reason": "Chest pain diagnosis inconsistent with knee replacement"
+    },
+    {
+      "diagnosis": "A09",
+      "diagnosis_desc": "Infectious gastroenteritis",
+      "procedure": "36.07",
+      "procedure_desc": "Drug-eluting coronary stent",
+      "reason": "Gastroenteritis does not warrant cardiac stenting"
+    },
+    {
+      "diagnosis": "L03.9",
+      "diagnosis_desc": "Cellulitis",
+      "procedure": "37.22",
+      "procedure_desc": "Left heart catheterization",
+      "reason": "Skin infection diagnosis inconsistent with cardiac catheterization"
+    },
+    {
+      "diagnosis": "N20.0",
+      "diagnosis_desc": "Calculus of kidney",
+      "procedure": "47.01",
+      "procedure_desc": "Laparoscopic appendectomy",
+      "reason": "Kidney stone diagnosis inconsistent with appendectomy"
+    },
+    {
+      "diagnosis": "T78.4",
+      "diagnosis_desc": "Allergy, unspecified",
+      "procedure": "60.29",
+      "procedure_desc": "TURP",
+      "reason": "Allergy diagnosis does not justify prostate surgery"
     }
   ]
 }
