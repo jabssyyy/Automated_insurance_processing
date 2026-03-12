@@ -13,6 +13,8 @@ const api = axios.create({
 });
 
 // Token holder — set by useAuth via setApiToken()
+// Note: Person 2 used localStorage, but F1 spec requires React state only.
+// We will follow the F1 spec for high-security demo requirements.
 let _token = null;
 
 export function setApiToken(token) {
@@ -67,30 +69,42 @@ export async function runValidation(claimId) {
   return res.data;
 }
 
-// ── Review ──────────────────────────────────────────────────────────
+// ── Review (Governance Layer) ───────────────────────────────────────
 
 export async function checkReview(claimId) {
-  const res = await api.post(`/review/check`, { claim_id: claimId });
+  const res = await api.post(`/review/check/${claimId}`);
   return res.data;
 }
 
-export async function getReviewQueue() {
+export async function fetchReviewQueue() {
   const res = await api.get('/review/queue');
   return res.data;
 }
 
-export async function approveReview(reviewId, notes) {
-  const res = await api.post(`/review/approve/${reviewId}`, { notes });
+export async function fetchReviewContext(reviewId) {
+  const res = await api.get(`/review/${reviewId}`);
   return res.data;
 }
 
-export async function rejectReview(reviewId, notes, reason) {
-  const res = await api.post(`/review/reject/${reviewId}`, {
+export async function approveReview(reviewId, reviewerId, notes) {
+  const res = await api.post(`/review/${reviewId}/approve`, {
+    reviewer_id: reviewerId,
     notes,
-    denial_reason: reason,
   });
   return res.data;
 }
+
+export async function rejectReview(reviewId, reviewerId, notes, denialReason) {
+  const res = await api.post(`/review/${reviewId}/reject`, {
+    reviewer_id: reviewerId,
+    notes,
+    denial_reason: denialReason,
+  });
+  return res.data;
+}
+
+// Aliases for compatibility
+export const getReviewQueue = fetchReviewQueue;
 
 // ── M3 Finalization ─────────────────────────────────────────────────
 
@@ -104,14 +118,13 @@ export async function submitClaim(claimId) {
   return res.data;
 }
 
-// ── Mock Approve (demo shortcut) ────────────────────────────────────
-
-export async function mockApprove(claimId) {
-  const res = await api.post(`/review/approve/${claimId}`, {
-    notes: 'Demo approval',
-  });
+// shortcut for demo
+export async function mockApproveClaim(claimId) {
+  const res = await api.post(`/m3/mock-approve/${claimId}`);
   return res.data;
 }
+
+export const mockApprove = mockApproveClaim;
 
 // ── Assistant ───────────────────────────────────────────────────────
 
@@ -146,6 +159,11 @@ export async function getClaims() {
 export async function getTimeline(claimId) {
   const res = await api.get(`/dashboard/timeline/${claimId}`);
   return res.data; // { claim_id, timeline }
+}
+
+export async function fetchClaim(claimId) {
+  const res = await api.get(`/dashboard/claims/${claimId}`);
+  return res.data;
 }
 
 export default api;
