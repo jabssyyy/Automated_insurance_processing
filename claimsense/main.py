@@ -122,6 +122,7 @@ _routers = [
     ("auth.router",          "auth_router",          "/auth",          "Auth"),
     ("m1.router",            "m1_router",             "/m1",            "M1 DocTriage"),
     ("doc_check.router",     "doc_check_router",      "/doc-check",     "Doc Check"),
+    ("pipeline.router",      "pipeline_router",        "/pipeline",      "Pipeline"),
     ("m2.router",            "m2_router",              "/m2",            "M2 Validation"),
     ("review.router",        "review_router",          "/review",        "Review"),
     ("m3.router",            "m3_router",              "/m3",            "M3 Clean Claim"),
