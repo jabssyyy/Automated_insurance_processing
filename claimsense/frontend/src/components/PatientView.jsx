@@ -16,11 +16,11 @@ import {
   CheckCircle2, Clock, AlertTriangle, MessageCircle,
   X, Send, Loader2, ChevronRight, DollarSign
 } from 'lucide-react'
-import { useAuth }          from '../hooks/useAuth'
-import { useSSE }           from '../hooks/useSSE'
-import StatusTimeline       from './StatusTimeline'
-import NotificationPanel    from './NotificationPanel'
-import DocumentUpload       from './DocumentUpload'
+import { useAuth } from '../hooks/useAuth'
+import { useSSE } from '../hooks/useSSE'
+import StatusTimeline from './StatusTimeline'
+import NotificationPanel from './NotificationPanel'
+import DocumentUpload from './DocumentUpload'
 import {
   getClaims, getTimeline, runValidation, sendChat
 } from '../services/api'
@@ -28,21 +28,21 @@ import {
 // ── Status banner configuration ─────────────────────────────────────────────
 
 const BANNER_CONFIG = {
-  APPROVED:           { color: 'bg-green-50 border-green-200',  icon: CheckCircle2, iconColor: 'text-green-600', label: 'Claim Approved', textColor: 'text-green-800' },
-  DOCUMENTS_COMPLETE: { color: 'bg-green-50 border-green-200',  icon: CheckCircle2, iconColor: 'text-green-600', label: 'Documents Complete', textColor: 'text-green-800' },
-  DENIED:             { color: 'bg-red-50 border-red-200',      icon: AlertCircle,  iconColor: 'text-red-600',   label: 'Claim Denied',    textColor: 'text-red-800' },
-  DOCUMENTS_MISSING:  { color: 'bg-red-50 border-red-200',      icon: AlertCircle,  iconColor: 'text-red-600',   label: 'Documents Missing', textColor: 'text-red-800' },
-  QUERY_RAISED:       { color: 'bg-amber-50 border-amber-200',  icon: AlertTriangle,iconColor: 'text-amber-600', label: 'Query Raised',    textColor: 'text-amber-800' },
-  ESCALATED_TO_IRDAI: { color: 'bg-amber-50 border-amber-200',  icon: AlertTriangle,iconColor: 'text-amber-600', label: 'Escalated to IRDAI', textColor: 'text-amber-800' },
-  POLICY_VALIDATING:  { color: 'bg-blue-50 border-blue-200',    icon: Clock,        iconColor: 'text-blue-600',  label: 'Validating Policy', textColor: 'text-blue-800' },
-  ICD_CHECK_RUNNING:  { color: 'bg-blue-50 border-blue-200',    icon: Clock,        iconColor: 'text-blue-600',  label: 'Running Medical Checks', textColor: 'text-blue-800' },
-  UNDER_HUMAN_REVIEW: { color: 'bg-blue-50 border-blue-200',    icon: Clock,        iconColor: 'text-blue-600',  label: 'Under Human Review', textColor: 'text-blue-800' },
-  SUBMITTED:          { color: 'bg-blue-50 border-blue-200',    icon: Clock,        iconColor: 'text-blue-600',  label: 'Submitted to Insurer', textColor: 'text-blue-800' },
+  APPROVED: { color: 'bg-green-50 border-green-200', icon: CheckCircle2, iconColor: 'text-green-600', label: 'Claim Approved', textColor: 'text-green-800' },
+  DOCUMENTS_COMPLETE: { color: 'bg-green-50 border-green-200', icon: CheckCircle2, iconColor: 'text-green-600', label: 'Documents Complete', textColor: 'text-green-800' },
+  DENIED: { color: 'bg-red-50 border-red-200', icon: AlertCircle, iconColor: 'text-red-600', label: 'Claim Denied', textColor: 'text-red-800' },
+  DOCUMENTS_MISSING: { color: 'bg-red-50 border-red-200', icon: AlertCircle, iconColor: 'text-red-600', label: 'Documents Missing', textColor: 'text-red-800' },
+  QUERY_RAISED: { color: 'bg-amber-50 border-amber-200', icon: AlertTriangle, iconColor: 'text-amber-600', label: 'Query Raised', textColor: 'text-amber-800' },
+  ESCALATED_TO_IRDAI: { color: 'bg-amber-50 border-amber-200', icon: AlertTriangle, iconColor: 'text-amber-600', label: 'Escalated to IRDAI', textColor: 'text-amber-800' },
+  POLICY_VALIDATING: { color: 'bg-blue-50 border-blue-200', icon: Clock, iconColor: 'text-blue-600', label: 'Validating Policy', textColor: 'text-blue-800' },
+  ICD_CHECK_RUNNING: { color: 'bg-blue-50 border-blue-200', icon: Clock, iconColor: 'text-blue-600', label: 'Running Medical Checks', textColor: 'text-blue-800' },
+  UNDER_HUMAN_REVIEW: { color: 'bg-blue-50 border-blue-200', icon: Clock, iconColor: 'text-blue-600', label: 'Under Human Review', textColor: 'text-blue-800' },
+  SUBMITTED: { color: 'bg-blue-50 border-blue-200', icon: Clock, iconColor: 'text-blue-600', label: 'Submitted to Insurer', textColor: 'text-blue-800' },
 }
 
 const PATIENT_VISIBLE = new Set([
-  'DOCUMENTS_MISSING','DOCUMENTS_COMPLETE','POLICY_VALIDATING',
-  'UNDER_HUMAN_REVIEW','APPROVED','DENIED','QUERY_RAISED','ESCALATED_TO_IRDAI',
+  'DOCUMENTS_MISSING', 'DOCUMENTS_COMPLETE', 'POLICY_VALIDATING',
+  'UNDER_HUMAN_REVIEW', 'APPROVED', 'DENIED', 'QUERY_RAISED', 'ESCALATED_TO_IRDAI',
 ])
 
 // ── Coverage display ──────────────────────────────────────────────────────────
@@ -89,11 +89,10 @@ function CoverageDisplay({ claim }) {
         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Coverage Rules</p>
         {coverage_results.filter((r) => r.rule_name !== 'copay_calculation').map((rule, i) => (
           <div key={i} className="flex items-start gap-2.5 py-2 px-3 rounded-lg bg-slate-50 border border-slate-100">
-            <span className={`mt-0.5 shrink-0 text-xs font-bold px-1.5 py-0.5 rounded-md ${
-              rule.status === 'PASS' ? 'bg-green-100 text-green-700' :
-              rule.status === 'FAIL' ? 'bg-red-100 text-red-700' :
-              'bg-amber-100 text-amber-700'
-            }`}>
+            <span className={`mt-0.5 shrink-0 text-xs font-bold px-1.5 py-0.5 rounded-md ${rule.status === 'PASS' ? 'bg-green-100 text-green-700' :
+                rule.status === 'FAIL' ? 'bg-red-100 text-red-700' :
+                  'bg-amber-100 text-amber-700'
+              }`}>
               {rule.status}
             </span>
             <div className="flex-1 min-w-0">
@@ -112,8 +111,8 @@ function CoverageDisplay({ claim }) {
 // ── Chat assistant drawer ─────────────────────────────────────────────────────
 
 function ChatAssistant({ claimId }) {
-  const [open, setOpen]       = useState(false)
-  const [input, setInput]     = useState('')
+  const [open, setOpen] = useState(false)
+  const [input, setInput] = useState('')
   const [messages, setMessages] = useState([
     { role: 'assistant', text: 'Hi! I can help you understand your claim status and coverage. What would you like to know?' }
   ])
@@ -171,11 +170,10 @@ function ChatAssistant({ claimId }) {
           <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin">
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
-                  m.role === 'user'
+                <div className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${m.role === 'user'
                     ? 'bg-blue-600 text-white rounded-br-sm'
                     : 'bg-slate-100 text-slate-800 rounded-bl-sm'
-                }`}>
+                  }`}>
                   {m.text}
                 </div>
               </div>
@@ -219,13 +217,13 @@ function ChatAssistant({ claimId }) {
 // ── PatientView (main) ────────────────────────────────────────────────────────
 
 export default function PatientView() {
-  const { token, logout }       = useAuth()
-  const navigate                = useNavigate()
-  const { latestEvent }         = useSSE(token)
+  const { token, logout } = useAuth()
+  const navigate = useNavigate()
+  const { latestEvent } = useSSE(token)
 
-  const [claim, setClaim]       = useState(null)
+  const [claim, setClaim] = useState(null)
   const [timeline, setTimeline] = useState([])
-  const [loading, setLoading]   = useState(true)
+  const [loading, setLoading] = useState(true)
   const [currentStatus, setCurrentStatus] = useState(null)
 
   // Fetch claim data
@@ -271,8 +269,8 @@ export default function PatientView() {
     navigate('/')
   }
 
-  const claimId    = claim?.claim_id
-  const bannerCfg  = BANNER_CONFIG[currentStatus] ||
+  const claimId = claim?.claim_id
+  const bannerCfg = BANNER_CONFIG[currentStatus] ||
     { color: 'bg-slate-50 border-slate-200', icon: Clock, iconColor: 'text-slate-400', label: currentStatus || 'Loading…', textColor: 'text-slate-700' }
   const BannerIcon = bannerCfg.icon
 
