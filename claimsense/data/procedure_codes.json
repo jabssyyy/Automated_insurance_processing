@@ -1,0 +1,24 @@
+{
+  "codes": [
+    {"code": "47.09", "description": "Appendectomy (open)"},
+    {"code": "47.01", "description": "Laparoscopic appendectomy"},
+    {"code": "51.22", "description": "Cholecystectomy (laparoscopic)"},
+    {"code": "36.1", "description": "Coronary artery bypass graft (CABG)"},
+    {"code": "36.06", "description": "Percutaneous coronary intervention (PCI / Angioplasty)"},
+    {"code": "81.54", "description": "Total knee replacement"},
+    {"code": "81.51", "description": "Total hip replacement"},
+    {"code": "79.31", "description": "Open reduction internal fixation (ORIF) — femur"},
+    {"code": "53.00", "description": "Inguinal hernia repair (unilateral)"},
+    {"code": "68.49", "description": "Total abdominal hysterectomy"},
+    {"code": "74.1", "description": "Caesarean section (lower segment)"},
+    {"code": "55.04", "description": "Percutaneous nephrostomy"},
+    {"code": "56.0", "description": "Ureteroscopy with lithotripsy"},
+    {"code": "39.50", "description": "Angioplasty of non-coronary vessel"},
+    {"code": "33.24", "description": "Fibre-optic bronchoscopy"},
+    {"code": "45.23", "description": "Colonoscopy"},
+    {"code": "04.07", "description": "Excision of nerve — carpal tunnel release"},
+    {"code": "28.3", "description": "Tonsillectomy"},
+    {"code": "66.29", "description": "Bilateral tubal ligation"},
+    {"code": "99.04", "description": "Transfusion of packed red blood cells"}
+  ]
+}

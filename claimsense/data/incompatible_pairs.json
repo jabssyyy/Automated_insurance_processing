@@ -1,0 +1,75 @@
+{
+  "description": "Known incompatible diagnosis-procedure pairs. If a claim contains any of these combinations, it should be flagged for review.",
+  "pairs": [
+    {
+      "diagnosis": "E11.9",
+      "diagnosis_desc": "Type 2 diabetes mellitus",
+      "procedure": "74.1",
+      "procedure_desc": "Caesarean section",
+      "reason": "Diabetes alone does not justify a C-section — clinical justification required"
+    },
+    {
+      "diagnosis": "J06.9",
+      "diagnosis_desc": "Acute upper respiratory infection",
+      "procedure": "36.1",
+      "procedure_desc": "CABG surgery",
+      "reason": "URI does not warrant cardiac bypass surgery"
+    },
+    {
+      "diagnosis": "M54.5",
+      "diagnosis_desc": "Low back pain",
+      "procedure": "81.54",
+      "procedure_desc": "Total knee replacement",
+      "reason": "Back pain diagnosis not consistent with knee replacement"
+    },
+    {
+      "diagnosis": "R50.9",
+      "diagnosis_desc": "Fever, unspecified",
+      "procedure": "51.22",
+      "procedure_desc": "Laparoscopic cholecystectomy",
+      "reason": "Unspecified fever does not indicate cholecystectomy"
+    },
+    {
+      "diagnosis": "N39.0",
+      "diagnosis_desc": "Urinary tract infection",
+      "procedure": "81.51",
+      "procedure_desc": "Total hip replacement",
+      "reason": "UTI diagnosis inconsistent with hip replacement procedure"
+    },
+    {
+      "diagnosis": "K35.80",
+      "diagnosis_desc": "Acute appendicitis",
+      "procedure": "28.3",
+      "procedure_desc": "Tonsillectomy",
+      "reason": "Appendicitis diagnosis inconsistent with tonsil surgery"
+    },
+    {
+      "diagnosis": "I10",
+      "diagnosis_desc": "Essential hypertension",
+      "procedure": "68.49",
+      "procedure_desc": "Total hysterectomy",
+      "reason": "Hypertension alone does not justify hysterectomy"
+    },
+    {
+      "diagnosis": "J45.9",
+      "diagnosis_desc": "Asthma",
+      "procedure": "55.04",
+      "procedure_desc": "Percutaneous nephrostomy",
+      "reason": "Asthma diagnosis inconsistent with kidney procedure"
+    },
+    {
+      "diagnosis": "D50.9",
+      "diagnosis_desc": "Iron deficiency anaemia",
+      "procedure": "36.06",
+      "procedure_desc": "PCI / Angioplasty",
+      "reason": "Anaemia alone does not justify cardiac intervention"
+    },
+    {
+      "diagnosis": "G40.9",
+      "diagnosis_desc": "Epilepsy",
+      "procedure": "53.00",
+      "procedure_desc": "Inguinal hernia repair",
+      "reason": "Epilepsy diagnosis inconsistent with hernia surgery"
+    }
+  ]
+}
