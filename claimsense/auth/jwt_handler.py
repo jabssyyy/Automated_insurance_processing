@@ -1,8 +1,9 @@
 """
-ClaimSense.ai — JWT Token Handler.
+ClaimSense — JWT Token Handler.
 
-Creates and verifies HS256 JWT tokens.  Provides a ``get_current_user``
-FastAPI dependency for protected endpoints.
+Creates and verifies HS256 JWT tokens.
+    - create_access_token(user_id, role)  → signed JWT string
+    - verify_token(token)                 → decoded payload dict or HTTPException 401
 """
 
 from __future__ import annotations
@@ -10,22 +11,18 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import HTTPException, status
 from jose import JWTError, jwt
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.config import get_settings
-from shared.database import get_db
-from shared.models import User
 
-security = HTTPBearer()
 settings = get_settings()
 
 
 def create_access_token(
-    data: dict[str, Any],
+    user_id: str,
+    role: str,
+    email: str = "",
     expires_delta: Optional[timedelta] = None,
 ) -> str:
     """
@@ -33,22 +30,30 @@ def create_access_token(
 
     Parameters
     ----------
-    data : dict
-        Payload to encode (must include ``sub`` with user email).
+    user_id : str
+        Unique identifier for the user.
+    role : str
+        User role (patient, hospital_staff, insurer, admin).
+    email : str, optional
+        User email to embed in the token.
     expires_delta : timedelta, optional
-        Custom expiry; defaults to ``JWT_EXPIRY_MINUTES`` from config.
+        Custom expiry; defaults to 24 hours.
 
     Returns
     -------
     str
         Encoded JWT string.
     """
-    to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (
-        expires_delta or timedelta(minutes=settings.JWT_EXPIRY_MINUTES)
+        expires_delta or timedelta(hours=24)
     )
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+    payload: dict[str, Any] = {
+        "user_id": user_id,
+        "role": role,
+        "email": email,
+        "exp": expire,
+    }
+    return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
 def verify_token(token: str) -> dict[str, Any]:
@@ -58,7 +63,7 @@ def verify_token(token: str) -> dict[str, Any]:
     Returns
     -------
     dict
-        Decoded payload.
+        Decoded payload containing user_id, role, email.
 
     Raises
     ------
@@ -76,31 +81,3 @@ def verify_token(token: str) -> dict[str, Any]:
             detail=f"Invalid or expired token: {exc}",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    """
-    FastAPI dependency — extract and verify the current user from a Bearer token.
-
-    Returns the full ``User`` ORM object.
-    """
-    payload = verify_token(credentials.credentials)
-    email: Optional[str] = payload.get("sub")
-    if email is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token missing 'sub' claim.",
-        )
-
-    result = await db.execute(select(User).where(User.email == email))
-    user = result.scalar_one_or_none()
-
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found.",
-        )
-    return user

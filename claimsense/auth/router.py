@@ -1,84 +1,52 @@
 """
-ClaimSense.ai — Auth Router.
+ClaimSense — Auth Router.
 
 Endpoints:
-    POST /auth/register  — create a new user
-    POST /auth/login     — authenticate and receive a JWT
-    GET  /auth/me        — return current user profile
+    POST /auth/login       — authenticate with email + password → JWT
+    POST /auth/demo-login  — hackathon quick-login by role → JWT
+    GET  /auth/me          — return current user info from JWT
 """
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from passlib.context import CryptContext
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.database import get_db
 from shared.models import User, UserRole
-from shared.schemas import (
-    TokenResponse,
-    UserCreateRequest,
-    UserLoginRequest,
-    UserResponse,
-)
-from auth.jwt_handler import create_access_token, get_current_user
+from shared.schemas import TokenResponse, UserLoginRequest
+from auth.jwt_handler import create_access_token
+from auth.rbac import get_current_user
 
 router = APIRouter()
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-@router.post(
-    "/register",
-    response_model=UserResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Register a new user",
-)
-async def register(
-    body: UserCreateRequest,
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    """Create a new platform user with hashed password."""
-    # Check for duplicate email
-    existing = await db.execute(select(User).where(User.email == body.email))
-    if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email already registered.",
-        )
+# ── Request schemas (local, not worth adding to shared) ──────────────
 
-    # Validate role
-    try:
-        role = UserRole(body.role)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid role: {body.role}. Must be one of {[r.value for r in UserRole]}",
-        )
+class DemoLoginRequest(BaseModel):
+    """Hackathon quick-login — just pick a role."""
+    role: str
 
-    user = User(
-        email=body.email,
-        hashed_password=pwd_ctx.hash(body.password),
-        role=role,
-        phone=body.phone,
-        hospital_id=body.hospital_id,
-        insurer_id=body.insurer_id,
-    )
-    db.add(user)
-    await db.flush()
-    await db.refresh(user)
-    return user
 
+# ═════════════════════════════════════════════════════════════════════
+# POST /login
+# ═════════════════════════════════════════════════════════════════════
 
 @router.post(
     "/login",
     response_model=TokenResponse,
-    summary="Login and receive JWT",
+    summary="Login with email and password",
 )
 async def login(
     body: UserLoginRequest,
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     """Authenticate user credentials and return a JWT access token."""
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
@@ -90,7 +58,9 @@ async def login(
         )
 
     token = create_access_token(
-        data={"sub": user.email, "role": user.role.value, "user_id": user.id}
+        user_id=str(user.id),
+        role=user.role.value,
+        email=user.email,
     )
     return {
         "access_token": token,
@@ -100,11 +70,68 @@ async def login(
     }
 
 
+# ═════════════════════════════════════════════════════════════════════
+# POST /demo-login
+# ═════════════════════════════════════════════════════════════════════
+
+@router.post(
+    "/demo-login",
+    response_model=TokenResponse,
+    summary="Hackathon quick-login by role",
+)
+async def demo_login(
+    body: DemoLoginRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Accept a role name and return a JWT for the seeded demo user of that role.
+
+    No password required — this is the quick-login for hackathon demos.
+    """
+    # Validate the requested role
+    try:
+        role_enum = UserRole(body.role)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid role: {body.role}. Must be one of {[r.value for r in UserRole]}",
+        )
+
+    # Find the demo user for this role
+    result = await db.execute(
+        select(User).where(User.role == role_enum).limit(1)
+    )
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No demo user found for role '{body.role}'.",
+        )
+
+    token = create_access_token(
+        user_id=str(user.id),
+        role=user.role.value,
+        email=user.email,
+    )
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "role": user.role.value,
+        "user_id": user.id,
+    }
+
+
+# ═════════════════════════════════════════════════════════════════════
+# GET /me
+# ═════════════════════════════════════════════════════════════════════
+
 @router.get(
     "/me",
-    response_model=UserResponse,
-    summary="Get current user profile",
+    summary="Get current user info from JWT",
 )
-async def me(current_user: User = Depends(get_current_user)) -> User:
-    """Return the authenticated user's profile."""
-    return current_user
+async def me(
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Return the authenticated user's info as stored in the JWT payload."""
+    return user
