@@ -1,4 +1,5 @@
 /**
+<<<<<<< HEAD
  * ClaimSense.ai — API Service Layer.
  *
  * Axios instance with JWT interceptor and all backend API functions.
@@ -13,8 +14,6 @@ const api = axios.create({
 });
 
 // Token holder — set by useAuth via setApiToken()
-// Note: Person 2 used localStorage, but F1 spec requires React state only.
-// We will follow the F1 spec for high-security demo requirements.
 let _token = null;
 
 export function setApiToken(token) {
@@ -69,42 +68,30 @@ export async function runValidation(claimId) {
   return res.data;
 }
 
-// ── Review (Governance Layer) ───────────────────────────────────────
+// ── Review ──────────────────────────────────────────────────────────
 
 export async function checkReview(claimId) {
-  const res = await api.post(`/review/check/${claimId}`);
+  const res = await api.post(`/review/check`, { claim_id: claimId });
   return res.data;
 }
 
-export async function fetchReviewQueue() {
+export async function getReviewQueue() {
   const res = await api.get('/review/queue');
   return res.data;
 }
 
-export async function fetchReviewContext(reviewId) {
-  const res = await api.get(`/review/${reviewId}`);
+export async function approveReview(reviewId, notes) {
+  const res = await api.post(`/review/approve/${reviewId}`, { notes });
   return res.data;
 }
 
-export async function approveReview(reviewId, reviewerId, notes) {
-  const res = await api.post(`/review/${reviewId}/approve`, {
-    reviewer_id: reviewerId,
+export async function rejectReview(reviewId, notes, reason) {
+  const res = await api.post(`/review/reject/${reviewId}`, {
     notes,
+    denial_reason: reason,
   });
   return res.data;
 }
-
-export async function rejectReview(reviewId, reviewerId, notes, denialReason) {
-  const res = await api.post(`/review/${reviewId}/reject`, {
-    reviewer_id: reviewerId,
-    notes,
-    denial_reason: denialReason,
-  });
-  return res.data;
-}
-
-// Aliases for compatibility
-export const getReviewQueue = fetchReviewQueue;
 
 // ── M3 Finalization ─────────────────────────────────────────────────
 
@@ -118,13 +105,14 @@ export async function submitClaim(claimId) {
   return res.data;
 }
 
-// shortcut for demo
-export async function mockApproveClaim(claimId) {
-  const res = await api.post(`/m3/mock-approve/${claimId}`);
+// ── Mock Approve (demo shortcut) ────────────────────────────────────
+
+export async function mockApprove(claimId) {
+  const res = await api.post(`/review/approve/${claimId}`, {
+    notes: 'Demo approval',
+  });
   return res.data;
 }
-
-export const mockApprove = mockApproveClaim;
 
 // ── Assistant ───────────────────────────────────────────────────────
 
@@ -161,9 +149,126 @@ export async function getTimeline(claimId) {
   return res.data; // { claim_id, timeline }
 }
 
-export async function fetchClaim(claimId) {
-  const res = await api.get(`/dashboard/claims/${claimId}`);
-  return res.data;
+export default api;
+=======
+ * ClaimSense.ai — API Service Layer
+ *
+ * Centralized API calls for the frontend.
+ * All requests proxy through Vite to FastAPI at localhost:8000.
+ */
+
+const API_BASE = '/api';
+
+async function request(url, options = {}) {
+  const defaultHeaders = {
+    'Content-Type': 'application/json',
+  };
+
+  const token = localStorage.getItem('cs_token');
+  if (token) {
+    defaultHeaders['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_BASE}${url}`, {
+    ...options,
+    headers: { ...defaultHeaders, ...options.headers },
+  });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(error.detail || `API Error ${res.status}`);
+  }
+
+  return res.json();
 }
 
-export default api;
+// ═══════════════════════════════════════════════════════════
+// Review endpoints
+// ═══════════════════════════════════════════════════════════
+
+export function fetchReviewQueue() {
+  return request('/review/queue');
+}
+
+export function fetchReviewContext(reviewId) {
+  return request(`/review/${reviewId}`);
+}
+
+export function checkReview(claimId) {
+  return request(`/review/check/${claimId}`, { method: 'POST' });
+}
+
+export function approveReview(reviewId, reviewerId, notes) {
+  return request(`/review/${reviewId}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({ reviewer_id: reviewerId, notes }),
+  });
+}
+
+export function rejectReview(reviewId, reviewerId, notes, denialReason) {
+  return request(`/review/${reviewId}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reviewer_id: reviewerId, notes, denial_reason: denialReason }),
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// M3 endpoints
+// ═══════════════════════════════════════════════════════════
+
+export function finalizeClaim(claimId) {
+  return request(`/m3/finalize/${claimId}`, { method: 'POST' });
+}
+
+export function submitClaim(claimId) {
+  return request(`/m3/submit/${claimId}`, { method: 'POST' });
+}
+
+export function mockApproveClaim(claimId) {
+  return request(`/m3/mock-approve/${claimId}`, { method: 'POST' });
+}
+
+// ═══════════════════════════════════════════════════════════
+// M2 endpoints
+// ═══════════════════════════════════════════════════════════
+
+export function validateClaim(claimId) {
+  return request(`/m2/validate/${claimId}`, { method: 'POST' });
+}
+
+// ═══════════════════════════════════════════════════════════
+// Claim endpoints
+// ═══════════════════════════════════════════════════════════
+
+export function fetchClaims() {
+  return request('/claims');
+}
+
+export function fetchClaim(claimId) {
+  return request(`/claims/${claimId}`);
+}
+
+// ═══════════════════════════════════════════════════════════
+// SSE connection
+// ═══════════════════════════════════════════════════════════
+
+export function connectSSE(claimId, onMessage) {
+  const url = `${API_BASE}/sse/stream/${claimId}`;
+  const source = new EventSource(url);
+
+  source.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      onMessage(data);
+    } catch {
+      onMessage({ detail: event.data });
+    }
+  };
+
+  source.onerror = () => {
+    console.warn('SSE connection error, reconnecting...');
+  };
+
+  return source;
+}
+>>>>>>> ce3a0935a3f98fdefa84cfecb4e14b1ede5f6c16
