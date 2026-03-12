@@ -1,130 +1,131 @@
-import React, { useState, useEffect } from 'react';
-import { Bell, MessageSquare, Smartphone, X, Check } from 'lucide-react';
-import { getNotifications, markNotificationRead } from '../services/api';
-
 /**
- * Bell icon with unread count badge. Click opens a dropdown with
- * notification list. Each notification shows message, timestamp,
- * and channel icon (WhatsApp / SMS / in-app).
+ * NotificationPanel — bell icon with dropdown of notifications.
+ * Used by all views.
  */
+
+import React, { useState, useEffect, useRef } from 'react'
+import { Bell, MessageSquare, Smartphone, Bell as BellIcon, CheckCheck } from 'lucide-react'
+import { getNotifications, markNotificationRead } from '../services/api'
+
+const CHANNEL_ICONS = {
+  whatsapp: MessageSquare,
+  sms: Smartphone,
+  in_app: BellIcon,
+}
+
+function timeAgo(isoString) {
+  if (!isoString) return ''
+  const diff = Date.now() - new Date(isoString).getTime()
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  return `${Math.floor(h / 24)}d ago`
+}
+
 export default function NotificationPanel() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifications, setNotifications] = useState([])
+  const [open, setOpen]                   = useState(false)
+  const panelRef                          = useRef(null)
+
+  const unreadCount = notifications.filter((n) => !n.is_read).length
 
   const fetchNotifications = async () => {
     try {
-      const data = await getNotifications();
-      setNotifications(data.notifications || []);
-      setUnreadCount(data.unread_count || 0);
+      const res = await getNotifications()
+      setNotifications(res.data?.notifications || res.data || [])
     } catch {
-      // Silently handle — panel just shows empty
+      // Silent fail — backend may not be running
     }
-  };
+  }
 
   useEffect(() => {
-    fetchNotifications();
-    const timer = setInterval(fetchNotifications, 15000); // Poll every 15s
-    return () => clearInterval(timer);
-  }, []);
+    fetchNotifications()
+    const interval = setInterval(fetchNotifications, 30000) // poll every 30s
+    return () => clearInterval(interval)
+  }, [])
 
-  const handleMarkRead = async (id) => {
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (panelRef.current && !panelRef.current.contains(e.target)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const handleRead = async (notification) => {
+    if (notification.is_read) return
     try {
-      await markNotificationRead(id);
+      await markNotificationRead(notification.id)
       setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
-      );
-      setUnreadCount((c) => Math.max(0, c - 1));
-    } catch {
-      // Ignore
-    }
-  };
-
-  const channelIcon = (ch) => {
-    switch (ch) {
-      case 'whatsapp':
-        return <span className="text-green-500 text-sm">💬</span>;
-      case 'sms':
-        return <Smartphone className="w-3.5 h-3.5 text-blue-500" />;
-      default:
-        return <MessageSquare className="w-3.5 h-3.5 text-slate-400" />;
-    }
-  };
+        prev.map((n) => n.id === notification.id ? { ...n, is_read: true } : n)
+      )
+    } catch {/* silent */}
+  }
 
   return (
-    <div className="relative">
-      {/* Bell */}
+    <div className="relative" ref={panelRef}>
+      {/* Bell button */}
       <button
-        onClick={() => { setIsOpen(!isOpen); if (!isOpen) fetchNotifications(); }}
-        className="relative p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors"
+        onClick={() => setOpen((o) => !o)}
+        className="relative p-2 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+        aria-label="Notifications"
       >
         <Bell className="w-5 h-5" />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
+          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
       </button>
 
       {/* Dropdown */}
-      {isOpen && (
-        <>
-          {/* Backdrop */}
-          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-100 z-50 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+            <span className="text-sm font-semibold text-slate-800">Notifications</span>
+            {unreadCount > 0 && (
+              <span className="text-xs text-blue-600 font-medium">{unreadCount} unread</span>
+            )}
+          </div>
 
-          <div className="absolute right-0 top-12 w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden animate-slide-up">
-            {/* Header */}
-            <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center">
-              <h3 className="font-bold text-slate-800">Notifications</h3>
-              <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* List */}
-            <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
-              {notifications.length === 0 ? (
-                <div className="p-8 text-center text-slate-400">
-                  <Bell className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  <p className="text-sm">No notifications yet</p>
-                </div>
-              ) : (
-                notifications.map((n) => (
-                  <div
+          <div className="max-h-80 overflow-y-auto scrollbar-thin">
+            {notifications.length === 0 ? (
+              <div className="py-8 text-center text-slate-400 text-sm">
+                No notifications yet
+              </div>
+            ) : (
+              notifications.slice(0, 20).map((n) => {
+                const Icon = CHANNEL_ICONS[n.channel] || BellIcon
+                return (
+                  <button
                     key={n.id}
-                    onClick={() => !n.is_read && handleMarkRead(n.id)}
-                    className={`px-5 py-4 cursor-pointer transition-colors ${
-                      n.is_read ? 'bg-white' : 'bg-blue-50/40 hover:bg-blue-50'
+                    onClick={() => handleRead(n)}
+                    className={`w-full text-left px-4 py-3 flex gap-3 hover:bg-slate-50 transition-colors border-b border-slate-50 ${
+                      !n.is_read ? 'bg-blue-50/40' : ''
                     }`}
                   >
-                    <div className="flex items-start gap-3">
-                      <div className="mt-0.5">{channelIcon(n.channel)}</div>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm leading-relaxed ${n.is_read ? 'text-slate-500' : 'text-slate-800 font-medium'}`}>
-                          {n.message}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1.5">
-                          <span className="text-[11px] text-slate-400 font-medium">
-                            {n.sent_at ? new Date(n.sent_at).toLocaleString() : 'Pending'}
-                          </span>
-                          {n.is_read && (
-                            <span className="flex items-center gap-0.5 text-[10px] text-green-500 font-medium">
-                              <Check className="w-3 h-3" /> Read
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      {!n.is_read && (
-                        <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0" />
-                      )}
+                    <div className={`mt-0.5 p-1.5 rounded-lg shrink-0 ${!n.is_read ? 'bg-blue-100' : 'bg-slate-100'}`}>
+                      <Icon className={`w-3.5 h-3.5 ${!n.is_read ? 'text-blue-600' : 'text-slate-400'}`} />
                     </div>
-                  </div>
-                ))
-              )}
-            </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs leading-relaxed ${!n.is_read ? 'text-slate-800 font-medium' : 'text-slate-600'}`}>
+                        {n.message}
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">{timeAgo(n.sent_at)}</p>
+                    </div>
+                    {n.is_read && <CheckCheck className="w-3.5 h-3.5 text-green-400 shrink-0 mt-0.5" />}
+                  </button>
+                )
+              })
+            )}
           </div>
-        </>
+        </div>
       )}
     </div>
-  );
+  )
 }

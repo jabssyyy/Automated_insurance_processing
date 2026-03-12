@@ -1,62 +1,75 @@
 /**
- * ClaimSense.ai — SSE Hook.
+ * useSSE — Server-Sent Events hook.
  *
- * Connects to the dashboard SSE stream and provides real-time events.
- * Auto-reconnects on disconnect with a 3-second delay.
+ * Connects to /api/dashboard/stream?token={jwt}.
+ * Auto-reconnects on disconnect after 3 seconds.
+ *
+ * Returns: { events, latestEvent, isConnected }
  */
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useAuth } from './useAuth';
 
-export default function useSSE() {
-  const { token, isAuthenticated } = useAuth();
-  const [events, setEvents] = useState([]);
-  const [latestEvent, setLatestEvent] = useState(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const eventSourceRef = useRef(null);
-  const reconnectTimerRef = useRef(null);
+import { useState, useEffect, useRef, useCallback } from 'react'
+
+export function useSSE(token) {
+  const [events, setEvents]           = useState([])
+  const [latestEvent, setLatestEvent] = useState(null)
+  const [isConnected, setIsConnected] = useState(false)
+  const esRef       = useRef(null)
+  const retryTimer  = useRef(null)
+  const mountedRef  = useRef(true)
 
   const connect = useCallback(() => {
-    if (!isAuthenticated || !token) return;
+    if (!token || !mountedRef.current) return
 
-    // Close any existing connection
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
+    // Close existing connection
+    if (esRef.current) {
+      esRef.current.close()
+      esRef.current = null
     }
 
-    const url = `/api/dashboard/stream?token=${encodeURIComponent(token)}`;
-    const es = new EventSource(url);
-    eventSourceRef.current = es;
+    const url = `/api/dashboard/stream?token=${encodeURIComponent(token)}`
+    const es = new EventSource(url)
+    esRef.current = es
 
     es.onopen = () => {
-      setIsConnected(true);
-      console.log('[SSE] Connected');
-    };
+      if (mountedRef.current) setIsConnected(true)
+    }
 
-    es.onmessage = (event) => {
+    es.onmessage = (e) => {
+      if (!mountedRef.current) return
       try {
-        const data = JSON.parse(event.data);
-        setLatestEvent(data);
-        setEvents((prev) => [...prev, data]);
-      } catch (err) {
-        // Heartbeat comments ": heartbeat\n\n" are not JSON — ignore
+        const parsed = JSON.parse(e.data)
+        setLatestEvent(parsed)
+        setEvents((prev) => [...prev.slice(-99), parsed]) // keep last 100
+      } catch {
+        // Ignore heartbeat or non-JSON frames
       }
-    };
+    }
 
     es.onerror = () => {
-      setIsConnected(false);
-      es.close();
-      console.log('[SSE] Disconnected — reconnecting in 3s');
-      reconnectTimerRef.current = setTimeout(connect, 3000);
-    };
-  }, [token, isAuthenticated]);
+      if (!mountedRef.current) return
+      setIsConnected(false)
+      es.close()
+      esRef.current = null
+      // Auto-reconnect after 3 seconds
+      retryTimer.current = setTimeout(() => {
+        if (mountedRef.current) connect()
+      }, 3000)
+    }
+  }, [token])
 
   useEffect(() => {
-    connect();
-    return () => {
-      if (eventSourceRef.current) eventSourceRef.current.close();
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-    };
-  }, [connect]);
+    mountedRef.current = true
+    if (token) connect()
 
-  return { events, latestEvent, isConnected };
+    return () => {
+      mountedRef.current = false
+      if (retryTimer.current) clearTimeout(retryTimer.current)
+      if (esRef.current) {
+        esRef.current.close()
+        esRef.current = null
+      }
+    }
+  }, [token, connect])
+
+  return { events, latestEvent, isConnected }
 }
