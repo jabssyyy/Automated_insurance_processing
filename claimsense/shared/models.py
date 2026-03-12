@@ -285,6 +285,7 @@ class Notification(Base):
     delivery_status: Mapped[DeliveryStatus] = mapped_column(
         Enum(DeliveryStatus), default=DeliveryStatus.PENDING
     )
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     sent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
