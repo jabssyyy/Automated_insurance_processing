@@ -16,14 +16,14 @@ import {
   CheckCircle2, Clock, AlertTriangle, MessageCircle,
   X, Send, Loader2, ChevronRight, DollarSign
 } from 'lucide-react'
-import { useAuth } from '../hooks/useAuth'
-import { useSSE } from '../hooks/useSSE'
+import { useAuth } from '../hooks/useAuth.jsx'
+import { useSSE } from '../hooks/useSSE.jsx'
 import StatusTimeline from './StatusTimeline'
 import NotificationPanel from './NotificationPanel'
 import DocumentUpload from './DocumentUpload'
 import {
   getClaims, getTimeline, runValidation, sendChat
-} from '../services/api'
+} from '../services/api.jsx'
 
 // ── Status banner configuration ─────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../hooks/useAuth';
-import useSSE from '../hooks/useSSE';
-import { getClaims, getTimeline } from '../services/api';
+import { useAuth } from '../hooks/useAuth.jsx';
+import { useSSE } from '../hooks/useSSE.jsx';
+import { getClaims, getTimeline } from '../services/api.jsx';
 import { LogOut, Users, FileCheck, ShieldCheck, Building2 } from 'lucide-react';
 import StatusTimeline from './StatusTimeline';
 import NotificationPanel from './NotificationPanel';

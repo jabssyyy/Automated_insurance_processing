@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth.jwt_handler import get_current_user
+from auth.rbac import get_current_user
 from auth.rbac import require_role
 from shared.audit import log_action
 from shared.database import get_db

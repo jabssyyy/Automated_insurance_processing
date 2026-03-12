@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { Bell, MessageSquare, Smartphone, Bell as BellIcon, CheckCheck } from 'lucide-react'
-import { getNotifications, markNotificationRead } from '../services/api'
+import { getNotifications, markNotificationRead } from '../services/api.jsx'
 
 const CHANNEL_ICONS = {
   whatsapp: MessageSquare,

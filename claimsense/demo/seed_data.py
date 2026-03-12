@@ -16,7 +16,8 @@ import asyncio
 import logging
 import sys
 
-from passlib.context import CryptContext
+# Passlib bcrypt workaround for bcrypt >= 4.0.0
+import bcrypt
 from sqlalchemy import select
 
 # Ensure the parent package is importable when run as a script
@@ -38,7 +39,6 @@ logger = logging.getLogger("claimsense.demo.seed")
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 settings = get_settings()
-pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # ═══════════════════════════════════════════════════════════════════════
 # Demo constants
@@ -123,7 +123,7 @@ async def seed() -> None:
 
             user = User(
                 email=u["email"],
-                hashed_password=pwd_ctx.hash(u["password"]),
+                hashed_password=bcrypt.hashpw(u["password"].encode("utf-8"), bcrypt.gensalt()).decode("utf-8"),
                 role=u["role"],
                 phone=u.get("phone"),
                 hospital_id=u.get("hospital_id"),

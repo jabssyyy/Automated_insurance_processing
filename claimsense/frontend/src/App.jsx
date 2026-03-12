@@ -1,6 +1,6 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { AuthProvider, useAuth } from './hooks/useAuth'
+import { AuthProvider, useAuth } from './hooks/useAuth.jsx'
 import RoleSelector from './components/RoleSelector'
 import PatientView from './components/PatientView'
 

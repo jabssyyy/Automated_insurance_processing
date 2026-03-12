@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { fetchReviewQueue, fetchReviewContext, approveReview, rejectReview } from '../services/api'
+import { fetchReviewQueue, fetchReviewContext, approveReview, rejectReview } from '../services/api.jsx'
 
 /**
  * ReviewQueue — Pending review items table with approve/reject actions.

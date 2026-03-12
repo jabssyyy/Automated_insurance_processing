@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
+import { useAuth } from '../hooks/useAuth.jsx'
 import { ShieldCheck, Stethoscope, Building2, Loader2, AlertCircle } from 'lucide-react'
 
 const ROLES = [

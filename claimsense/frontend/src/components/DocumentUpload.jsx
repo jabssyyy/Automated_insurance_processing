@@ -3,8 +3,8 @@
  */
 
 import React, { useState, useRef, useCallback } from 'react'
-import { Upload, FileText, CheckCircle2, XCircle, Loader2, CloudUpload } from 'lucide-react'
-import { uploadDocuments, runDocCheck } from '../services/api'
+import { Upload, FileText, CheckCircle2, XCircle, Loader2, UploadCloud } from 'lucide-react'
+import { uploadDocuments, runDocCheck } from '../services/api.jsx'
 
 const ACCEPTED_TYPES = ['application/pdf', 'image/jpeg', 'image/png']
 const ACCEPTED_LABEL = 'PDF, JPG, PNG'
