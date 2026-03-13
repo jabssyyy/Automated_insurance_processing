@@ -289,6 +289,7 @@ export default function PatientView() {
   const [demoMode, setDemoMode] = useState(false)
   const [showNewForm, setShowNewForm] = useState(false)
   const [lastUpdated, setLastUpdated] = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   // Wizard state
   const [wizardStep, setWizardStep] = useState(1)
@@ -519,6 +520,14 @@ export default function PatientView() {
                 Updated {lastUpdated.toLocaleTimeString()}
               </span>
             )}
+            <button
+              onClick={async () => { setRefreshing(true); await fetchData(); setRefreshing(false); setLastUpdated(new Date()) }}
+              disabled={refreshing}
+              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-blue-600 px-2.5 py-1.5 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
+              title="Refresh"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
             <NotificationPanel />
             <button
               onClick={handleLogout}

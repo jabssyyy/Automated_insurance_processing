@@ -13,7 +13,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Building2, LogOut, Upload, FileText, Plus, Trash2, Loader2,
   CheckCircle2, AlertCircle, ClipboardList, PenLine, Eye,
-  ArrowLeft, ArrowRight, Zap, ShieldCheck, DollarSign
+  ArrowLeft, ArrowRight, Zap, ShieldCheck, DollarSign, RefreshCw
 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth.jsx'
 import { useSSE } from '../hooks/useSSE.jsx'
@@ -203,19 +203,25 @@ export default function HospitalView() {
   // Claims list
   const [claims, setClaims] = useState([])
   const [selectedClaim, setSelectedClaim] = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
   const [timeline, setTimeline] = useState([])
 
   // Fetch claims
+  const refreshClaims = async () => {
+    setRefreshing(true)
+    try {
+      const res = await getClaims()
+      const list = res.data?.claims || []
+      setClaims(list)
+    } catch {
+      setClaims([])
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await getClaims()
-        const list = res.data?.claims || []
-        setClaims(list)
-      } catch {
-        setClaims([])
-      }
-    })()
+    refreshClaims()
   }, [submitSuccess])
 
   // Fetch timeline for selected claim
@@ -372,6 +378,14 @@ export default function HospitalView() {
         </div>
         <div className="flex items-center gap-3">
           <NotificationPanel />
+          <button
+            onClick={refreshClaims}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-teal-600 px-3 py-2 rounded-lg hover:bg-teal-50 transition-colors disabled:opacity-50"
+            title="Refresh claims"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
           <button
             onClick={() => { resetForm(); setView('create') }}
             className="flex items-center gap-1.5 text-sm font-semibold text-white bg-teal-600 hover:bg-teal-700 px-4 py-2 rounded-lg transition-colors shadow-sm"
@@ -596,9 +610,15 @@ export default function HospitalView() {
                       {formatStatus(claim.current_status)}
                     </span>
                   </div>
-                  <div className="text-xs text-slate-500 flex justify-between mt-1">
-                    <span>{claim.claim_id}</span>
-                    <span>{claim.total_amount ? `₹${Number(claim.total_amount).toLocaleString('en-IN')}` : '—'}</span>
+                  <div className="text-xs text-slate-500 mt-1 space-y-0.5">
+                    <div className="flex justify-between">
+                      <span className="font-mono">{claim.claim_id}</span>
+                      <span className="font-semibold">{claim.total_amount ? `₹${Number(claim.total_amount).toLocaleString('en-IN')}` : '—'}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-400">
+                      <span>{claim.path === 'cashless' ? 'Cashless' : 'Reimbursement'}</span>
+                      <span>{claim.created_at ? new Date(claim.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</span>
+                    </div>
                   </div>
                 </div>
               ))}
