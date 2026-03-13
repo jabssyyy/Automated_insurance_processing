@@ -135,7 +135,7 @@ def _generate_message(
 async def send_notification(
     claim_id: str,
     body: SendNotificationRequest,
-    current_user: User = Depends(
+    current_user: dict[str, Any] = Depends(
         require_role("hospital_staff", "insurer", "admin")
     ),
     db: AsyncSession = Depends(get_db),
@@ -194,7 +194,7 @@ async def send_notification(
     await log_action(
         db,
         claim_id=claim_id,
-        actor=current_user.email,
+        actor=current_user.get("email", "system"),
         action_type="send_notification",
         module="notifications",
         details={
@@ -220,7 +220,7 @@ async def send_notification(
 @router.get("/", summary="In-app notification inbox")
 async def get_inbox(
     unread_only: bool = False,
-    current_user: User = Depends(
+    current_user: dict[str, Any] = Depends(
         require_role("patient", "hospital_staff", "insurer", "admin")
     ),
     db: AsyncSession = Depends(get_db),
@@ -230,11 +230,11 @@ async def get_inbox(
     Includes the unread count for badge display.
     """
     notifications = await get_notifications(
-        user_id=current_user.id,
+        user_id=current_user["user_id"],
         db=db,
         unread_only=unread_only,
     )
-    unread = await get_unread_count(current_user.id, db)
+    unread = await get_unread_count(current_user["user_id"], db)
 
     return {
         "notifications": notifications,
@@ -250,7 +250,7 @@ async def get_inbox(
 @router.post("/{notification_id}/read", summary="Mark notification as read")
 async def mark_notification_read(
     notification_id: int,
-    current_user: User = Depends(
+    current_user: dict[str, Any] = Depends(
         require_role("patient", "hospital_staff", "insurer", "admin")
     ),
     db: AsyncSession = Depends(get_db),

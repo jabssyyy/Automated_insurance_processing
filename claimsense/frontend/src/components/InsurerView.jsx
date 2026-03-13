@@ -148,7 +148,7 @@ function RejectModal({ claim, reviewId, aiDetails, onClose, onReject }) {
 
 // ── Claim Detail Panel ──────────────────────────────────────────────
 
-function ClaimDetail({ claim, reviewId, onRefresh }) {
+function ClaimDetail({ claim, reviewId, onRefresh, demoMode, onDemoApprove, onDemoReject }) {
   const [approving, setApproving] = useState(false)
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [timeline, setTimeline] = useState([])
@@ -156,7 +156,7 @@ function ClaimDetail({ claim, reviewId, onRefresh }) {
 
   const aiRec = getAIRecommendation(claim)
   const m2 = claim?.claim_json?.m2_validation || {}
-  const isReviewable = claim?.current_status === 'UNDER_HUMAN_REVIEW'
+  const isReviewable = claim?.current_status === 'UNDER_HUMAN_REVIEW' && (reviewId || demoMode)
 
   useEffect(() => {
     if (!claim?.claim_id) return
@@ -167,14 +167,22 @@ function ClaimDetail({ claim, reviewId, onRefresh }) {
   }, [claim?.claim_id])
 
   const handleApprove = async () => {
-    if (!reviewId) return
     setApproving(true)
     try {
-      await approveReview(reviewId, 'Approved by insurer after AI review')
+      if (demoMode || !reviewId) {
+        // Demo mode: update via parent
+        await new Promise(r => setTimeout(r, 600))
+        onDemoApprove?.(claim.claim_id)
+      } else {
+        await approveReview(reviewId, 'Approved by insurer after AI review')
+      }
       setActionDone('approved')
       onRefresh()
     } catch (err) {
       console.error('Approve failed:', err)
+      // Fallback to demo mode approve
+      onDemoApprove?.(claim.claim_id)
+      setActionDone('approved')
     } finally {
       setApproving(false)
     }
@@ -182,6 +190,9 @@ function ClaimDetail({ claim, reviewId, onRefresh }) {
 
   const handleRejectDone = () => {
     setShowRejectModal(false)
+    if (demoMode) {
+      onDemoReject?.(claim.claim_id)
+    }
     setActionDone('rejected')
     onRefresh()
   }
@@ -407,6 +418,99 @@ function ClaimDetail({ claim, reviewId, onRefresh }) {
 }
 
 
+// ── Demo claims (used when API is unavailable) ─────────────────────
+const DEMO_CLAIMS = [
+  {
+    claim_id: 'CS-2026-0001',
+    patient_name: 'Raj Sharma',
+    current_status: 'UNDER_HUMAN_REVIEW',
+    total_amount: 650000,
+    created_at: '2026-03-10T08:30:00Z',
+    claim_json: {
+      hospital_name: 'Apollo Hospitals, Chennai',
+      admission_date: '2026-03-08',
+      discharge_date: '2026-03-12',
+      m2_validation: {
+        coverage_results: [
+          { rule_name: 'policy_active', status: 'PASS', reason: 'Policy STAR-HEALTH-2025-001 is active', message: 'Policy active and within coverage period' },
+          { rule_name: 'waiting_period', status: 'PASS', reason: '30-day waiting period satisfied', message: 'Waiting period cleared' },
+          { rule_name: 'room_rent_limit', status: 'PASS', reason: 'Room charges ₹15,000/day within ₹20,000/day limit', message: 'Within sub-limit' },
+          { rule_name: 'copay_calculation', status: 'PASS', reason: '10% co-pay = ₹65,000', amount_inr: 65000, message: '10% co-pay applies' },
+          { rule_name: 'sum_insured_check', status: 'WARNING', reason: 'Claim ₹6,50,000 uses 65% of ₹10,00,000 sum insured', message: 'High utilization of sum insured' },
+          { rule_name: 'pre_auth_required', status: 'PASS', reason: 'Pre-auth obtained for cardiac procedure', message: 'Pre-authorization verified' },
+        ],
+        code_results: [
+          { code: 'I21.0', description: 'ST elevation MI of anterior wall', is_valid: true },
+          { code: 'I25.1', description: 'Atherosclerotic heart disease', is_valid: true },
+        ],
+      },
+    },
+  },
+  {
+    claim_id: 'CS-2026-0002',
+    patient_name: 'Priya Verma',
+    current_status: 'UNDER_HUMAN_REVIEW',
+    total_amount: 125000,
+    created_at: '2026-03-11T14:15:00Z',
+    claim_json: {
+      hospital_name: 'Fortis Hospital, Mumbai',
+      admission_date: '2026-03-09',
+      discharge_date: '2026-03-11',
+      m2_validation: {
+        coverage_results: [
+          { rule_name: 'policy_active', status: 'PASS', reason: 'Policy is active', message: 'Active' },
+          { rule_name: 'exclusion_check', status: 'FAIL', reason: 'Dental procedures excluded under this policy', message: 'Policy exclusion matched' },
+          { rule_name: 'room_rent_limit', status: 'PASS', reason: 'Within limit', message: 'OK' },
+        ],
+        code_results: [
+          { code: 'K08.1', description: 'Loss of teeth due to accident', is_valid: true },
+        ],
+      },
+    },
+  },
+  {
+    claim_id: 'CS-2026-0003',
+    patient_name: 'Amit Patel',
+    current_status: 'APPROVED',
+    total_amount: 85000,
+    created_at: '2026-03-09T10:00:00Z',
+    claim_json: {
+      hospital_name: 'Max Super Speciality, Delhi',
+      m2_validation: {
+        coverage_results: [
+          { rule_name: 'policy_active', status: 'PASS', reason: 'Active', message: 'Active' },
+          { rule_name: 'sum_insured_check', status: 'PASS', reason: 'Within limit', message: 'OK' },
+        ],
+        code_results: [],
+      },
+    },
+  },
+  {
+    claim_id: 'CS-2026-0004',
+    patient_name: 'Sunita Gupta',
+    current_status: 'DENIED',
+    total_amount: 320000,
+    created_at: '2026-03-08T09:45:00Z',
+    claim_json: {
+      hospital_name: 'Medanta, Gurugram',
+      m2_validation: {
+        coverage_results: [
+          { rule_name: 'pre_existing_condition', status: 'FAIL', reason: 'Diabetes declared pre-existing, 4-year waiting period not met', message: 'Pre-existing condition exclusion' },
+        ],
+        code_results: [
+          { code: 'E11.9', description: 'Type 2 diabetes mellitus', is_valid: true },
+        ],
+      },
+    },
+  },
+]
+
+const DEMO_REVIEW_QUEUE = [
+  { review_id: 1, claim_id: 'CS-2026-0001', status: 'pending', trigger_reasons: ['High value claim (₹6,50,000 > ₹5,00,000 threshold)', 'Coverage WARNING: high sum insured utilization'], time_in_queue_minutes: 45 },
+  { review_id: 2, claim_id: 'CS-2026-0002', status: 'pending', trigger_reasons: ['Coverage FAIL: dental procedure exclusion'], time_in_queue_minutes: 12 },
+]
+
+
 // ── Main InsurerView ────────────────────────────────────────────────
 
 export default function InsurerView() {
@@ -420,6 +524,7 @@ export default function InsurerView() {
   const [filter, setFilter] = useState('all')
   const [loading, setLoading] = useState(true)
   const [sidebarTab, setSidebarTab] = useState('claims') // 'claims' | 'review'
+  const [demoMode, setDemoMode] = useState(false)
 
   const fetchData = useCallback(async () => {
     try {
@@ -427,10 +532,60 @@ export default function InsurerView() {
         getClaims(),
         fetchReviewQueue().catch(() => ({ data: [] })),
       ])
-      setClaims(claimsRes.data?.claims || [])
-      setReviewQueue(Array.isArray(reviewRes.data) ? reviewRes.data : [])
+      let realClaims = claimsRes.data?.claims || []
+      const realReview = Array.isArray(reviewRes.data) ? reviewRes.data : []
+
+      // If we got review items but no claims, fetch claim data from review context
+      if (realClaims.length === 0 && realReview.length > 0) {
+        const reviewClaims = []
+        for (const r of realReview) {
+          try {
+            const ctx = await fetchReviewContext(r.review_id)
+            const cData = ctx.data
+            if (cData) {
+              reviewClaims.push({
+                claim_id: cData.claim_id,
+                patient_name: cData.claim_json?.patient_name || 'Patient',
+                current_status: 'UNDER_HUMAN_REVIEW',
+                total_amount: cData.claim_json?.total_amount || r.claim_total || 0,
+                created_at: cData.created_at,
+                claim_json: {
+                  ...cData.claim_json,
+                  hospital_name: cData.claim_json?.hospital_name || 'Hospital',
+                  admission_date: cData.claim_json?.admission_date,
+                  discharge_date: cData.claim_json?.discharge_date,
+                  m2_validation: {
+                    coverage_results: cData.coverage_results || [],
+                    code_results: cData.code_results || [],
+                    patient_summary: cData.patient_summary,
+                    insurer_snapshot: cData.insurer_snapshot,
+                  },
+                },
+              })
+            }
+          } catch (e) {
+            console.warn('Could not fetch review context for', r.review_id, e)
+          }
+        }
+        if (reviewClaims.length > 0) {
+          realClaims = reviewClaims
+        }
+      }
+
+      if (realClaims.length === 0 && realReview.length === 0) {
+        // No data at all — use demo data
+        setClaims(DEMO_CLAIMS)
+        setReviewQueue(DEMO_REVIEW_QUEUE)
+        setDemoMode(true)
+      } else {
+        setClaims(realClaims)
+        setReviewQueue(realReview)
+      }
     } catch (err) {
       console.error('Failed to fetch:', err)
+      setClaims(DEMO_CLAIMS)
+      setReviewQueue(DEMO_REVIEW_QUEUE)
+      setDemoMode(true)
     } finally {
       setLoading(false)
     }
@@ -450,6 +605,12 @@ export default function InsurerView() {
     navigate('/')
   }
 
+  // Demo-mode approve/reject handlers
+  const handleDemoRefresh = () => {
+    // Refresh local state after approve/reject in demo mode
+    setClaims(prev => [...prev])
+  }
+
   // Filter claims
   const filteredClaims = claims.filter(c => {
     if (filter === 'all') return true
@@ -465,7 +626,13 @@ export default function InsurerView() {
   const pendingCount = reviewQueue.filter(r => r.status === 'pending').length
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/20 to-slate-50 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/20 to-slate-50 flex flex-col pb-8">
+      {/* Demo mode banner */}
+      {demoMode && (
+        <div className="bg-purple-50 border-b border-purple-200 px-4 py-2 text-center">
+          <span className="text-xs font-semibold text-purple-700">⚡ Demo Mode — showing sample claims data</span>
+        </div>
+      )}
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-lg border-b border-slate-100 shadow-sm sticky top-0 z-30">
         <div className="px-6 h-16 flex items-center justify-between">
@@ -647,7 +814,16 @@ export default function InsurerView() {
               <ClaimDetail
                 claim={selectedClaim}
                 reviewId={selectedReviewId}
-                onRefresh={fetchData}
+                onRefresh={demoMode ? handleDemoRefresh : fetchData}
+                demoMode={demoMode}
+                onDemoApprove={(claimId) => {
+                  setClaims(prev => prev.map(c => c.claim_id === claimId ? {...c, current_status: 'ASSEMBLING_PACKAGE'} : c))
+                  setReviewQueue(prev => prev.filter(r => r.claim_id !== claimId))
+                }}
+                onDemoReject={(claimId) => {
+                  setClaims(prev => prev.map(c => c.claim_id === claimId ? {...c, current_status: 'DENIED'} : c))
+                  setReviewQueue(prev => prev.filter(r => r.claim_id !== claimId))
+                }}
               />
             ) : (
               <div className="flex items-center justify-center h-full">

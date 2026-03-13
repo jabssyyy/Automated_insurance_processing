@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './hooks/useAuth.jsx'
 import RoleSelector from './components/RoleSelector'
 import PatientView from './components/PatientView'
+import ServerStatus from './components/ServerStatus'
 
 // Lazy placeholders for views built by other team members
 const HospitalView = React.lazy(() =>
@@ -78,6 +79,7 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <AppRoutes />
+        <ServerStatus />
       </BrowserRouter>
     </AuthProvider>
   )

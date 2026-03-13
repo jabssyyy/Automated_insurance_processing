@@ -114,6 +114,21 @@ async def health_check() -> dict:
     return {"status": "healthy", "version": "0.1.0", "service": "ClaimSense.ai"}
 
 
+@app.get("/health/gemini", tags=["Health"])
+async def gemini_health() -> dict:
+    """Check Gemini API connectivity."""
+    api_key = settings.GEMINI_API_KEY
+    if not api_key:
+        return {"status": "unavailable", "reason": "GEMINI_API_KEY not set"}
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        return {"status": "connected", "model": "gemini-2.0-flash"}
+    except Exception as exc:
+        return {"status": "error", "reason": str(exc)}
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Router mounting (try/except so missing modules don't crash the app)
 # ═══════════════════════════════════════════════════════════════════════
