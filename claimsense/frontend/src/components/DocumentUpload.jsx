@@ -120,7 +120,7 @@ export default function DocumentUpload({ claimId, onUploadComplete }) {
         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${
           isDragOver ? 'bg-blue-100' : 'bg-white shadow-sm'
         }`}>
-          <CloudUpload className={`w-6 h-6 ${isDragOver ? 'text-blue-500' : 'text-slate-400'}`} />
+          <UploadCloud className={`w-6 h-6 ${isDragOver ? 'text-blue-500' : 'text-slate-400'}`} />
         </div>
         <div className="text-center">
           <p className="text-sm font-medium text-slate-700">

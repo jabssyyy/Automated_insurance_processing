@@ -37,6 +37,15 @@ export const demoLogin = (role) =>
 export const getClaims = () =>
   api.get('/dashboard/claims')
 
+export const createClaim = (policyNumber, claimType = 'inpatient', path = 'cashless') =>
+  api.post('/dashboard/create-claim', { policy_number: policyNumber, claim_type: claimType, path })
+
+export const runPipeline = (claimId) =>
+  api.post(`/pipeline/process/${claimId}`)
+
+export const continuePipeline = (claimId) =>
+  api.post(`/pipeline/continue/${claimId}`)
+
 export const getTimeline = (claimId) =>
   api.get(`/dashboard/timeline/${claimId}`)
 
