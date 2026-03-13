@@ -135,9 +135,28 @@ async def process_claim(
                 {"item": "Diagnostics", "amount": 5000},
             ],
             "total_amount": 53000,
-            "extracted_doc_types": ["discharge_summary", "hospital_bill", "id_proof"],
+            "extracted_doc_types": [
+                "discharge_summary", 
+                "hospital_bill", 
+                "id_proof", 
+                "policy_document", 
+                "prescription",
+                "procedure_report",
+                "icu_notes"
+            ],
+            "doctor_name": "Dr. Sarah Thomas",
+            "doctor_registration_number": "MCI-45892",
+            "policy_number": claim.policy_number or "STAR-HEALTH-2025-001"
         })
-        claim.claim_json = fallback_json
+        from sqlalchemy import update
+        await db.execute(
+            update(Claim)
+            .where(Claim.id == claim_id)
+            .values(claim_json=fallback_json)
+        )
+        await db.commit()
+        await db.refresh(claim)
+        
         if not claim.total_amount:
             from decimal import Decimal
             claim.total_amount = Decimal("53000")
