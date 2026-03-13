@@ -283,10 +283,15 @@ export default function HospitalView() {
       }))
 
       if (!res.data?.success) {
-        setExtractError('Gemini extraction returned partial data. Please review and complete the form manually.')
+        const backendError = res.data?.error || ''
+        if (backendError.toLowerCase().includes('quota') || backendError.includes('429')) {
+          setExtractError('Gemini AI quota exhausted. The form fields could not be auto-filled. Please enter the details manually or add a backup API key in .env.')
+        } else {
+          setExtractError('AI extraction could not fully process the document. Please review and complete the fields manually.')
+        }
       }
     } catch (err) {
-      setExtractError('Failed to extract data from the document. Please fill in the form manually.')
+      setExtractError('Failed to connect to the extraction service. Please fill in the form manually.')
     } finally {
       setExtracting(false)
     }

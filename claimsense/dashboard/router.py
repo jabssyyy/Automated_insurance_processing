@@ -151,7 +151,7 @@ async def claim_timeline(
 @router.post("/create-claim", summary="Create a new claim for current patient")
 async def create_claim(
     body: CreateClaimRequest,
-    current_user: dict[str, Any] = Depends(require_role("patient", "admin")),
+    current_user: dict[str, Any] = Depends(require_role("patient", "hospital_staff", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
     """
