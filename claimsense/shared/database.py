@@ -1,7 +1,7 @@
 """
 ClaimSense.ai — Async Database Engine & Session Factory.
 
-Uses SQLAlchemy 2.0 async API with asyncpg driver for PostgreSQL.
+Uses SQLAlchemy 2.0 async API with aiosqlite driver for SQLite.
 Provides:
     - ``engine``          – shared async engine
     - ``AsyncSessionLocal`` – async session factory
@@ -25,9 +25,7 @@ settings = get_settings()
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
-    pool_size=20,
-    max_overflow=10,
-    pool_pre_ping=True,
+    connect_args={"check_same_thread": False},
 )
 
 # ── Session Factory ───────────────────────────────────────────────────

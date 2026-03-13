@@ -163,7 +163,7 @@ async def check_review_needed(
         review_id = item.id
 
         # Update claim status
-        claim.status = ClaimStatus.UNDER_HUMAN_REVIEW
+        claim.status = ClaimStatus.UNDER_HUMAN_REVIEW.value
         await db.flush()
 
         # Broadcast SSE
@@ -207,7 +207,7 @@ async def list_pending_reviews(
     """
     result = await db.execute(
         select(ReviewItem)
-        .where(ReviewItem.status == ReviewStatus.PENDING)
+        .where(ReviewItem.status == ReviewStatus.PENDING.value)
         .order_by(ReviewItem.created_at.asc())
     )
     items = result.scalars().all()
@@ -242,7 +242,7 @@ async def list_pending_reviews(
                 claim_id=item.claim_id,
                 trigger_reasons=item.trigger_reasons or [],
                 claim_total=claim_total,
-                status=item.status.value,
+                status=item.status if isinstance(item.status, str) else item.status.value,
                 created_at=item.created_at,
                 time_in_queue_minutes=round(time_in_queue, 1) if time_in_queue else None,
             )
@@ -308,7 +308,7 @@ async def get_review_context(
         review_id=item.id,
         claim_id=item.claim_id,
         trigger_reasons=item.trigger_reasons or [],
-        status=item.status.value,
+        status=item.status if isinstance(item.status, str) else item.status.value,
         claim_json=claim_json,
         coverage_results=coverage_results,
         code_results=code_results,

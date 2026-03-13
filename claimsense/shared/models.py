@@ -6,9 +6,8 @@ Mapped-Column style and Python ``enum.Enum`` for type-safe status tracking.
 
 Key design decisions
 --------------------
-* **Claim.id** is auto-generated as ``CS-2026-XXXX`` via a DB default using
-  a PostgreSQL sequence wrapped in a trigger-free helper column.
-* **JSONB** columns store semi-structured data (Claim JSON, extracted data,
+* **Claim.id** is supplied by application code as ``CS-2026-XXXX``.
+* **JSON** columns store semi-structured data (Claim JSON, extracted data,
   policy rules, trigger reasons, role visibility).
 * All timestamps default to ``func.now()`` (server-side UTC).
 """
@@ -22,16 +21,14 @@ from decimal import Decimal
 from sqlalchemy import (
     Boolean,
     DateTime,
-    Enum,
     ForeignKey,
     Integer,
+    JSON,
     Numeric,
-    Sequence,
     String,
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from shared.database import Base
@@ -102,12 +99,6 @@ class DeliveryStatus(str, enum.Enum):
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Sequence for auto-generated Claim IDs  (CS-2026-0001, CS-2026-0002 …)
-# ═══════════════════════════════════════════════════════════════════════
-claim_id_seq = Sequence("claim_id_seq", start=1, increment=1)
-
-
-# ═══════════════════════════════════════════════════════════════════════
 # ORM Models
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -119,12 +110,12 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[UserRole] = mapped_column(Enum(UserRole), nullable=False)
+    role: Mapped[str] = mapped_column(String(50), nullable=False)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     hospital_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
     insurer_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime, server_default=func.now()
     )
 
     # Relationships
@@ -137,37 +128,33 @@ class Claim(Base):
     """
     Central claim record.
 
-    ``id`` is a human-readable string like ``CS-2026-0042``, built from
-    a PostgreSQL sequence.  The ``_seq`` column holds the raw integer;
-    ``id`` is a computed property.
+    ``id`` is a human-readable string like ``CS-2026-0042``, assigned
+    by application code.
     """
 
     __tablename__ = "claims"
 
-    _seq: Mapped[int] = mapped_column(
-        Integer, claim_id_seq, server_default=claim_id_seq.next_value(), unique=True
-    )
     id: Mapped[str] = mapped_column(String(20), primary_key=True)
     patient_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id"), nullable=False
     )
     hospital_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
     insurer_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    claim_type: Mapped[ClaimType] = mapped_column(Enum(ClaimType), nullable=False)
-    path: Mapped[ClaimPath] = mapped_column(Enum(ClaimPath), nullable=False)
-    status: Mapped[ClaimStatus] = mapped_column(
-        Enum(ClaimStatus), default=ClaimStatus.DOCUMENTS_MISSING
+    claim_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    path: Mapped[str] = mapped_column(String(50), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(50), default=ClaimStatus.DOCUMENTS_MISSING.value
     )
-    claim_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    claim_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     policy_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     total_amount: Mapped[Decimal | None] = mapped_column(
         Numeric(12, 2), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime, server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        DateTime, server_default=func.now(), onupdate=func.now()
     )
 
     # Relationships
@@ -194,10 +181,10 @@ class Document(Base):
     doc_type: Mapped[str] = mapped_column(String(100), nullable=False)
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    extracted_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    extracted_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime, server_default=func.now()
     )
 
     # Relationships
@@ -213,9 +200,9 @@ class PolicyCache(Base):
     policy_number: Mapped[str] = mapped_column(
         String(100), unique=True, nullable=False, index=True
     )
-    rules_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    rules_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime, server_default=func.now()
     )
 
 
@@ -231,9 +218,9 @@ class AuditLog(Base):
     actor: Mapped[str] = mapped_column(String(255), nullable=False)
     action_type: Mapped[str] = mapped_column(String(100), nullable=False)
     module: Mapped[str] = mapped_column(String(100), nullable=False)
-    details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime, server_default=func.now()
     )
 
 
@@ -246,20 +233,20 @@ class ReviewItem(Base):
     claim_id: Mapped[str] = mapped_column(
         String(20), ForeignKey("claims.id"), nullable=False
     )
-    trigger_reasons: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    trigger_reasons: Mapped[list | None] = mapped_column(JSON, nullable=True)
     reviewer_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id"), nullable=True
     )
-    status: Mapped[ReviewStatus] = mapped_column(
-        Enum(ReviewStatus), default=ReviewStatus.PENDING
+    status: Mapped[str] = mapped_column(
+        String(50), default=ReviewStatus.PENDING.value
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     denial_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime, server_default=func.now()
     )
     resolved_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        DateTime, nullable=True
     )
 
     # Relationships
@@ -278,16 +265,14 @@ class Notification(Base):
     user_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id"), nullable=False
     )
-    channel: Mapped[NotificationChannel] = mapped_column(
-        Enum(NotificationChannel), nullable=False
-    )
+    channel: Mapped[str] = mapped_column(String(50), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
-    delivery_status: Mapped[DeliveryStatus] = mapped_column(
-        Enum(DeliveryStatus), default=DeliveryStatus.PENDING
+    delivery_status: Mapped[str] = mapped_column(
+        String(50), default=DeliveryStatus.PENDING.value
     )
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     sent_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        DateTime, nullable=True
     )
 
     # Relationships
@@ -310,9 +295,9 @@ class StatusUpdate(Base):
     )
     status: Mapped[str] = mapped_column(String(50), nullable=False)
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
-    role_visibility: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    role_visibility: Mapped[list | None] = mapped_column(JSON, nullable=True)
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime, server_default=func.now()
     )
 
     # Relationships

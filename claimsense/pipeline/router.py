@@ -129,7 +129,7 @@ async def process_claim(
 
     if not doc_result["complete"]:
         missing = ", ".join(doc_result["missing_documents"])
-        claim.status = ClaimStatus.DOCUMENTS_MISSING
+        claim.status = ClaimStatus.DOCUMENTS_MISSING.value
         await _broadcast(
             db, claim_id, "DOCUMENTS_MISSING",
             f"Documents missing: {missing}",
@@ -151,7 +151,7 @@ async def process_claim(
             "missing_documents": doc_result["missing_documents"],
         }
 
-    claim.status = ClaimStatus.DOCUMENTS_COMPLETE
+    claim.status = ClaimStatus.DOCUMENTS_COMPLETE.value
     await _broadcast(
         db, claim_id, "DOCUMENTS_COMPLETE",
         "All documents received and verified",
@@ -279,7 +279,7 @@ async def continue_pipeline(
                 "missing_documents": doc_result["missing_documents"],
             }
 
-        claim.status = ClaimStatus.DOCUMENTS_COMPLETE
+        claim.status = ClaimStatus.DOCUMENTS_COMPLETE.value
         await _broadcast(
             db, claim_id, "DOCUMENTS_COMPLETE",
             "All documents received and verified",

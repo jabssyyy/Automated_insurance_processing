@@ -107,7 +107,7 @@ async def validate_claim(
     claim_json = ClaimJSON(**claim.claim_json)
 
     # ── Update status: POLICY_VALIDATING ──────────────────────────────
-    claim.status = ClaimStatus.POLICY_VALIDATING
+    claim.status = ClaimStatus.POLICY_VALIDATING.value
     await db.flush()
 
     await _broadcast_status(
@@ -153,7 +153,7 @@ async def validate_claim(
         db, claim_id, "ICD_CHECK_RUNNING",
         "Running ICD-10 code validation and coverage checks in parallel",
     )
-    claim.status = ClaimStatus.ICD_CHECK_RUNNING
+    claim.status = ClaimStatus.ICD_CHECK_RUNNING.value
     await db.flush()
 
     # Wrap synchronous functions in async wrappers for parallel execution
@@ -263,9 +263,9 @@ async def validate_claim(
 
     # Set claim status based on results
     if requires_human_review:
-        claim.status = ClaimStatus.UNDER_HUMAN_REVIEW
+        claim.status = ClaimStatus.UNDER_HUMAN_REVIEW.value
     else:
-        claim.status = ClaimStatus.ASSEMBLING_PACKAGE
+        claim.status = ClaimStatus.ASSEMBLING_PACKAGE.value
 
     await db.flush()
 

@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     # ── Gemini AI ──────────────────────────────────────────────────────
     GEMINI_API_KEY: str = ""
 
-    # ── PostgreSQL ─────────────────────────────────────────────────────
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/claimsense"
+    # ── Database (SQLite) ──────────────────────────────────────────────
+    DATABASE_URL: str = "sqlite+aiosqlite:///./claimsense.db"
 
     # ── Twilio Notifications ───────────────────────────────────────────
     TWILIO_ACCOUNT_SID: str = ""

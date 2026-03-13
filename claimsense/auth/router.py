@@ -59,13 +59,13 @@ async def login(
 
     token = create_access_token(
         user_id=str(user.id),
-        role=user.role.value,
+        role=user.role if isinstance(user.role, str) else user.role.value,
         email=user.email,
     )
     return {
         "access_token": token,
         "token_type": "bearer",
-        "role": user.role.value,
+        "role": user.role if isinstance(user.role, str) else user.role.value,
         "user_id": user.id,
     }
 
@@ -99,7 +99,7 @@ async def demo_login(
 
     # Find the demo user for this role
     result = await db.execute(
-        select(User).where(User.role == role_enum).limit(1)
+        select(User).where(User.role == role_enum.value).limit(1)
     )
     user = result.scalar_one_or_none()
 
@@ -111,13 +111,13 @@ async def demo_login(
 
     token = create_access_token(
         user_id=str(user.id),
-        role=user.role.value,
+        role=user.role if isinstance(user.role, str) else user.role.value,
         email=user.email,
     )
     return {
         "access_token": token,
         "token_type": "bearer",
-        "role": user.role.value,
+        "role": user.role if isinstance(user.role, str) else user.role.value,
         "user_id": user.id,
     }
 

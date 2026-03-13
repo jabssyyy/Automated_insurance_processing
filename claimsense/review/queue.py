@@ -158,7 +158,7 @@ async def create_review_item(
     item = ReviewItem(
         claim_id=claim_id,
         trigger_reasons=trigger_reasons,
-        status=ReviewStatus.PENDING,
+        status=ReviewStatus.PENDING.value,
     )
     db.add(item)
     await db.flush()
@@ -227,13 +227,11 @@ async def approve_claim(
 
     if not item:
         raise ValueError(f"Review item #{review_id} not found")
-    if item.status != ReviewStatus.PENDING:
-        raise ValueError(
-            f"Review item #{review_id} is already {item.status.value} — cannot approve"
+            f"Review item #{review_id} is already {item.status} — cannot approve"
         )
 
     # Update review item
-    item.status = ReviewStatus.APPROVED
+    item.status = ReviewStatus.APPROVED.value
     item.reviewer_id = reviewer_id
     item.notes = notes
     item.resolved_at = datetime.now(timezone.utc)
@@ -244,7 +242,7 @@ async def approve_claim(
     )
     claim = claim_result.scalar_one_or_none()
     if claim:
-        claim.status = ClaimStatus.ASSEMBLING_PACKAGE
+        claim.status = ClaimStatus.ASSEMBLING_PACKAGE.value
 
     await db.flush()
 
@@ -310,13 +308,13 @@ async def reject_claim(
 
     if not item:
         raise ValueError(f"Review item #{review_id} not found")
-    if item.status != ReviewStatus.PENDING:
+    if item.status != ReviewStatus.PENDING.value:
         raise ValueError(
-            f"Review item #{review_id} is already {item.status.value} — cannot reject"
+            f"Review item #{review_id} is already {item.status} — cannot reject"
         )
 
     # Update review item
-    item.status = ReviewStatus.REJECTED
+    item.status = ReviewStatus.REJECTED.value
     item.reviewer_id = reviewer_id
     item.notes = notes
     item.denial_reason = denial_reason
@@ -328,7 +326,7 @@ async def reject_claim(
     )
     claim = claim_result.scalar_one_or_none()
     if claim:
-        claim.status = ClaimStatus.DENIED
+        claim.status = ClaimStatus.DENIED.value
 
     await db.flush()
 

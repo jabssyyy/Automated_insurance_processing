@@ -140,7 +140,7 @@ async def finalize_claim(
     # Step 2: Generate adjudicator summary
     # ══════════════════════════════════════════════════════════════════
 
-    claim.status = ClaimStatus.ASSEMBLING_PACKAGE
+    claim.status = ClaimStatus.ASSEMBLING_PACKAGE.value
     await db.flush()
 
     await _broadcast_status(
@@ -249,7 +249,7 @@ async def submit_claim(
     )
 
     # ── Update claim status → SUBMITTED ───────────────────────────────
-    claim.status = ClaimStatus.SUBMITTED
+    claim.status = ClaimStatus.SUBMITTED.value
     updated_json = claim.claim_json.copy()
     updated_json["submission"] = {
         "reference_number": ref_number,
@@ -337,7 +337,7 @@ async def mock_approve_claim(
         raise HTTPException(status_code=404, detail=f"Claim {claim_id} not found")
 
     # ── Approve ───────────────────────────────────────────────────────
-    claim.status = ClaimStatus.APPROVED
+    claim.status = ClaimStatus.APPROVED.value
     approved_amount = float(claim.total_amount or 0)
     if approved_amount == 0 and claim.claim_json:
         billing = claim.claim_json.get("billing_breakdown", {})
