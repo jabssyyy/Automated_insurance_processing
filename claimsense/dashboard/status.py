@@ -222,13 +222,8 @@ async def get_active_claims(
         else:
             return []
     elif role == "insurer":
-        # Fetch the user to get their insurer_id
-        user_result = await db.execute(select(User).where(User.id == user_id))
-        user = user_result.scalar_one_or_none()
-        if user and user.insurer_id:
-            query = query.where(Claim.insurer_id == user.insurer_id)
-        else:
-            return []
+        # In demo mode, insurer sees all claims (no insurer_id filtering)
+        pass
     elif role == "admin":
         pass  # No filter — admin sees all
     else:

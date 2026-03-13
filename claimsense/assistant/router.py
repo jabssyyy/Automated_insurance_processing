@@ -15,11 +15,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth.rbac import get_current_user
 from auth.rbac import require_role
 from shared.audit import log_action
 from shared.database import get_db
-from shared.models import User
 
 from assistant.chat import chat
 
@@ -65,7 +63,7 @@ class ChatResponse(BaseModel):
 )
 async def chat_endpoint(
     body: ChatRequest,
-    current_user: User = Depends(
+    current_user: dict[str, Any] = Depends(
         require_role("patient", "hospital_staff", "insurer", "admin")
     ),
     db: AsyncSession = Depends(get_db),
@@ -79,7 +77,7 @@ async def chat_endpoint(
     Conversation history is passed from the client to maintain context
     across multiple exchanges.
     """
-    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    role = current_user.get("role", "patient")
 
     # Convert pydantic models to dicts for the chat function
     history = [
@@ -100,7 +98,7 @@ async def chat_endpoint(
     await log_action(
         db,
         claim_id=body.claim_id,
-        actor=current_user.email,
+        actor=current_user.get("email", "system"),
         action_type="assistant_chat",
         module="assistant",
         details={

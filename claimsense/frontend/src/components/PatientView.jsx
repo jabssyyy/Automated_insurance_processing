@@ -437,12 +437,14 @@ export default function PatientView() {
   const [pipelineRunning, setPipelineRunning] = useState(false)
   const [pipelineError, setPipelineError] = useState(null)
   const [demoMode, setDemoMode] = useState(false)
+  const [showNewForm, setShowNewForm] = useState(false)
 
   // Determine which phase to show
   const claimId = claim?.claim_id
-  const hasNoClaim = !claimId && !loading
-  const isUploadPhase = claimId && currentStatus === 'DOCUMENTS_MISSING'
-  const isTrackingPhase = claimId && currentStatus && currentStatus !== 'DOCUMENTS_MISSING'
+  const isTerminal = currentStatus === 'APPROVED' || currentStatus === 'DENIED'
+  const hasNoClaim = (!claimId && !loading) || (isTerminal && !loading && showNewForm)
+  const isUploadPhase = claimId && currentStatus === 'DOCUMENTS_MISSING' && !showNewForm
+  const isTrackingPhase = claimId && currentStatus && currentStatus !== 'DOCUMENTS_MISSING' && !showNewForm
 
   // Fetch claim data
   const fetchData = useCallback(async () => {
@@ -493,9 +495,18 @@ export default function PatientView() {
   }
 
   const handleClaimCreated = async (newClaimId) => {
-    setClaim({ claim_id: newClaimId, current_status: 'DOCUMENTS_MISSING', patient_name: 'Demo Patient' })
+    setClaim({ claim_id: newClaimId, current_status: 'DOCUMENTS_MISSING' })
     setCurrentStatus('DOCUMENTS_MISSING')
+    setShowNewForm(false)
     setLoading(false)
+  }
+
+  const startNewClaim = () => {
+    setClaim(null)
+    setCurrentStatus(null)
+    setTimeline([])
+    setShowNewForm(true)
+    setDemoMode(false)
   }
 
   // Demo pipeline simulation — runs locally when backend is down
@@ -606,6 +617,14 @@ export default function PatientView() {
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
                 {claimId}
               </span>
+            )}
+            {isTerminal && (
+              <button
+                onClick={startNewClaim}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" /> New Claim
+              </button>
             )}
             <NotificationPanel />
             <button
@@ -738,7 +757,7 @@ export default function PatientView() {
                       {[
                         { label: 'Claim ID', value: claimId },
                         { label: 'Status', value: currentStatus?.replace(/_/g, ' ') },
-                        { label: 'Patient', value: claim?.patient_name || 'Demo Patient' },
+                        { label: 'Patient', value: claim?.patient_name || claim?.claim_json?.patient_name || '—' },
                         { label: 'Total Amount', value: claim?.total_amount ? `₹${Number(claim.total_amount).toLocaleString('en-IN')}` : '—' },
                         { label: 'Submitted', value: claim?.created_at ? new Date(claim.created_at).toLocaleDateString('en-IN') : '—' },
                       ].map(({ label, value }) => (

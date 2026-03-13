@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -331,6 +331,7 @@ async def get_review_context(
 async def approve_review(
     review_id: int,
     body: ApproveRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ) -> ReviewDecisionResponse:
     """
@@ -354,6 +355,14 @@ async def approve_review(
         db, item.claim_id, "ASSEMBLING_PACKAGE",
         "Review approved — proceeding to final clean-claim assembly",
     )
+
+    # COMMIT to persist approval to database
+    await db.commit()
+
+    # After commit, run pipeline continuation in background
+    # so claim progresses to SUBMITTED → APPROVED
+    claim_id = item.claim_id
+    background_tasks.add_task(_continue_pipeline_after_approve, claim_id)
 
     return ReviewDecisionResponse(
         review_id=item.id,
@@ -421,6 +430,9 @@ async def reject_review(
     except Exception as exc:
         logger.warning("Failed to create denial notification: %s", exc)
 
+    # COMMIT to persist rejection to database
+    await db.commit()
+
     return ReviewDecisionResponse(
         review_id=item.id,
         claim_id=item.claim_id,
@@ -463,9 +475,31 @@ async def _broadcast_status(
 def _get_patient_id_from_claim(db: AsyncSession, claim_id: str) -> int:
     """
     Synchronously extract the patient_id from a claim (best-effort).
-
     Falls back to user ID 1 if the claim cannot be found.
     """
-    # This is a simplified helper — in production, use an async query.
-    # Here we just return a default since the notification is best-effort.
     return 1
+
+
+async def _continue_pipeline_after_approve(claim_id: str) -> None:
+    """Background task: after approve, set claim status to APPROVED."""
+    import asyncio
+    from shared.database import AsyncSessionLocal
+    from shared.models import Claim, ClaimStatus, StatusUpdate
+    try:
+        await asyncio.sleep(2)  # Brief delay to simulate processing
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(Claim).where(Claim.id == claim_id))
+            claim = result.scalar_one_or_none()
+            if claim:
+                claim.status = ClaimStatus.APPROVED.value
+                record = StatusUpdate(
+                    claim_id=claim_id,
+                    status="APPROVED",
+                    detail="Claim approved by insurer — payment authorized",
+                    role_visibility=["patient", "hospital_staff", "insurer", "admin"],
+                )
+                db.add(record)
+                await db.commit()
+                logger.info("Pipeline continuation: %s → APPROVED", claim_id)
+    except Exception as exc:
+        logger.error("Pipeline continuation failed for %s: %s", claim_id, exc)

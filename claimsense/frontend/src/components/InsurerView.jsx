@@ -817,7 +817,7 @@ export default function InsurerView() {
                 onRefresh={demoMode ? handleDemoRefresh : fetchData}
                 demoMode={demoMode}
                 onDemoApprove={(claimId) => {
-                  setClaims(prev => prev.map(c => c.claim_id === claimId ? {...c, current_status: 'ASSEMBLING_PACKAGE'} : c))
+                  setClaims(prev => prev.map(c => c.claim_id === claimId ? {...c, current_status: 'APPROVED'} : c))
                   setReviewQueue(prev => prev.filter(r => r.claim_id !== claimId))
                 }}
                 onDemoReject={(claimId) => {

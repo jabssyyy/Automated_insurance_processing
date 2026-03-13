@@ -70,7 +70,7 @@ export default function ServerStatus() {
       <div className="flex items-center gap-1.5">
         <span className={`w-1.5 h-1.5 rounded-full ${geminiDot}`} />
         <span className={gemini.status === 'connected' ? 'text-green-400' : gemini.status === 'warning' ? 'text-yellow-400' : 'text-red-400'}>
-          {gemini.status === 'connected' ? 'Gemini API active' : gemini.status === 'warning' ? 'Gemini: ' + gemini.detail : 'Gemini offline'}
+          {gemini.status === 'connected' ? 'AI connected' : gemini.status === 'warning' ? 'Gemini: ' + gemini.detail : 'Gemini offline'}
         </span>
         {gemini.status === 'connected' && (
           <span className="text-slate-500">{gemini.detail}</span>
