@@ -50,10 +50,7 @@ const DEMO_POLICIES = [
   { number: 'ICICI-LOMBARD-2025-77', name: 'ICICI Lombard iHealth', sum_insured: '₹15,00,000', type: 'Family Floater' },
 ]
 
-const CLAIM_TYPES = [
-  { key: 'reimbursement', label: 'Reimbursement', desc: 'Claim after paying hospital', icon: '💰' },
-  { key: 'cashless', label: 'Cashless', desc: 'Direct settlement with hospital', icon: '🏥' },
-]
+// Claim type is always 'reimbursement' for patients (cashless is hospital-staff only)
 
 
 // ── Pipeline Stepper ────────────────────────────────────────────────────────
@@ -231,8 +228,7 @@ function ChatAssistant({ claimId }) {
 function WizardSteps({ currentStep }) {
   const steps = [
     { num: 1, label: 'Select Policy' },
-    { num: 2, label: 'Claim Type' },
-    { num: 3, label: 'Upload & Submit' },
+    { num: 2, label: 'Upload & Submit' },
   ]
 
   return (
@@ -281,7 +277,7 @@ const PATIENT_VISIBLE = new Set([
 export default function PatientView() {
   const { token, logout } = useAuth()
   const navigate = useNavigate()
-  const { latestEvent } = useSSE(token)
+  const { latestEvent, reconnecting } = useSSE(token)
 
   // Core state
   const [claim, setClaim] = useState(null)
@@ -297,7 +293,6 @@ export default function PatientView() {
   // Wizard state
   const [wizardStep, setWizardStep] = useState(1)
   const [selectedPolicy, setSelectedPolicy] = useState('')
-  const [claimType, setClaimType] = useState('reimbursement')
   const [wizardError, setWizardError] = useState(null)
   const [creatingClaim, setCreatingClaim] = useState(false)
 
@@ -307,8 +302,10 @@ export default function PatientView() {
   // Determine which phase to show
   const claimId = claim?.claim_id
   const isTerminal = currentStatus === 'APPROVED' || currentStatus === 'DENIED'
+  // Show wizard only when there's genuinely no active claim
   const hasNoClaim = (!claimId && !loading) || (isTerminal && !loading && showNewForm)
-  const isTrackingPhase = claimId && currentStatus && currentStatus !== 'DOCUMENTS_MISSING' && !showNewForm
+  // Show tracking phase for ANY existing claim with a status (including DOCUMENTS_MISSING)
+  const isTrackingPhase = claimId && currentStatus && !showNewForm
 
   // Fetch claim data
   const fetchData = useCallback(async () => {
@@ -363,33 +360,27 @@ export default function PatientView() {
     navigate('/')
   }
 
-  // ── Step 1 → 2 ────────────────────────────────────────
-  const handlePolicyNext = () => {
+  // ── Step 1 → 2: Select policy, create claim, go to upload ──
+  const handlePolicyNext = async () => {
     if (!selectedPolicy) {
       setWizardError('Please select a policy')
       return
     }
     setWizardError(null)
-    setWizardStep(2)
-  }
-
-  // ── Step 2 → 3: Create claim in backend, then move to upload ──
-  const handleClaimTypeNext = async () => {
-    setWizardError(null)
     setCreatingClaim(true)
     try {
-      const res = await createClaim(selectedPolicy, 'inpatient', claimType)
+      const res = await createClaim(selectedPolicy, 'inpatient', 'reimbursement')
       const newClaimId = res.data?.claim_id
       setClaim({ claim_id: newClaimId, current_status: 'DOCUMENTS_MISSING' })
       setCurrentStatus('DOCUMENTS_MISSING')
-      setWizardStep(3)
+      setWizardStep(2)
     } catch (err) {
       // Demo mode fallback
       const demoId = `CS-DEMO-${Date.now().toString(36).toUpperCase()}`
       setClaim({ claim_id: demoId, current_status: 'DOCUMENTS_MISSING' })
       setCurrentStatus('DOCUMENTS_MISSING')
       setDemoMode(true)
-      setWizardStep(3)
+      setWizardStep(2)
     } finally {
       setCreatingClaim(false)
     }
@@ -435,7 +426,6 @@ export default function PatientView() {
     setDemoMode(false)
     setWizardStep(1)
     setSelectedPolicy('')
-    setClaimType('reimbursement')
     setAiSummary(null)
   }
 
@@ -608,66 +598,20 @@ export default function PatientView() {
 
                   <button
                     onClick={handlePolicyNext}
-                    disabled={!selectedPolicy}
+                    disabled={!selectedPolicy || creatingClaim}
                     className="w-full flex items-center justify-center gap-2.5 py-3.5 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold shadow-lg shadow-blue-200/50 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-xl"
                   >
-                    <ArrowRight className="w-5 h-5" /> Continue to Claim Type
+                    {creatingClaim ? (
+                      <><Loader2 className="w-5 h-5 animate-spin" /> Creating Claim…</>
+                    ) : (
+                      <><ArrowRight className="w-5 h-5" /> Continue to Upload</>
+                    )}
                   </button>
                 </div>
               )}
 
-              {/* ── Step 2: Select Claim Type ─────────────── */}
-              {wizardStep === 2 && (
-                <div>
-                  <div className="text-center mb-8">
-                    <h2 className="text-xl font-bold text-slate-900">Select Claim Type</h2>
-                    <p className="text-slate-500 mt-2 text-sm">Choose how you'd like to file this claim</p>
-                  </div>
-
-                  <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-6">
-                    <div className="grid grid-cols-2 gap-4">
-                      {CLAIM_TYPES.map((t) => (
-                        <button
-                          key={t.key}
-                          onClick={() => setClaimType(t.key)}
-                          className={`p-6 rounded-xl border-2 text-center transition-all duration-200 ${
-                            claimType === t.key
-                              ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100'
-                              : 'border-slate-100 hover:border-blue-200'
-                          }`}
-                        >
-                          <span className="text-3xl block mb-3">{t.icon}</span>
-                          <p className="text-sm font-semibold text-slate-800">{t.label}</p>
-                          <p className="text-xs text-slate-500 mt-1">{t.desc}</p>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => setWizardStep(1)}
-                      className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl border-2 border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors"
-                    >
-                      <ArrowLeft className="w-4 h-4" /> Back
-                    </button>
-                    <button
-                      onClick={handleClaimTypeNext}
-                      disabled={creatingClaim}
-                      className="flex-[2] flex items-center justify-center gap-2 py-3 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold shadow-lg shadow-blue-200/50 transition-all duration-200 disabled:opacity-50"
-                    >
-                      {creatingClaim ? (
-                        <><Loader2 className="w-5 h-5 animate-spin" /> Creating Claim…</>
-                      ) : (
-                        <><ArrowRight className="w-5 h-5" /> Continue to Upload</>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Step 3: Upload Documents + Submit ─────── */}
-              {wizardStep === 3 && claimId && (
+              {/* ── Step 2: Upload Documents + Submit ─────── */}
+              {wizardStep === 2 && claimId && (
                 <div>
                   <div className="text-center mb-6">
                     <h2 className="text-xl font-bold text-slate-900">Upload Documents & Submit</h2>
@@ -675,7 +619,7 @@ export default function PatientView() {
                       Upload your medical documents below. All 3 mandatory docs are required.
                     </p>
                     <p className="text-xs text-blue-600 font-medium mt-1">
-                      Claim ID: {claimId} · Policy: {selectedPolicy} · Type: {claimType}
+                      Claim ID: {claimId} · Policy: {selectedPolicy} · Type: Reimbursement
                     </p>
                   </div>
 
@@ -770,7 +714,7 @@ export default function PatientView() {
                         { label: 'Patient', value: claim?.patient_name || claim?.claim_json?.patient_name || '—' },
                         { label: 'Total Amount', value: claim?.total_amount ? `₹${Number(claim.total_amount).toLocaleString('en-IN')}` : '—' },
                         { label: 'Policy', value: claim?.claim_json?.policy_number || selectedPolicy || '—' },
-                        { label: 'Type', value: claim?.claim_json?.claim_type || claimType || '—' },
+                        { label: 'Type', value: claim?.claim_json?.claim_type || 'Reimbursement' },
                       ].map(({ label, value }) => (
                         <div key={label}>
                           <dt className="text-xs text-slate-400 font-medium">{label}</dt>

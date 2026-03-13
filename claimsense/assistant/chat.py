@@ -367,35 +367,51 @@ async def _call_gemini(
     messages: list[dict[str, str]],
 ) -> str:
     """
-    Call Gemini 2.0 Flash (text model, not vision) with the system prompt
-    and conversation messages.
-
-    Uses the ``google-genai`` SDK.
-
-    Parameters
-    ----------
-    system_prompt : str
-        System instructions including claim context.
-    messages : list[dict]
-        Conversation messages with roles and content.
-
-    Returns
-    -------
-    str
-        Generated response text.
+    Call Gemini 2.0 Flash with dual-key fallback.
+    Tries primary key first, falls back to backup on any error.
     """
-    if not settings.GEMINI_API_KEY:
-        logger.warning("GEMINI_API_KEY not configured — returning fallback response.")
+    primary_key = settings.GEMINI_API_KEY
+    backup_key = getattr(settings, 'GEMINI_API_KEY_BACKUP', '')
+
+    if not primary_key and not backup_key:
+        logger.warning("No Gemini API keys configured.")
         return (
             "The AI assistant is not configured yet (missing API key). "
             "Please set the GEMINI_API_KEY environment variable."
         )
 
+    # Try primary first, then backup
+    keys_to_try = []
+    if primary_key:
+        keys_to_try.append(("primary", primary_key))
+    if backup_key:
+        keys_to_try.append(("backup", backup_key))
+
+    last_error = None
+    for key_name, api_key in keys_to_try:
+        try:
+            result = await _call_gemini_with_key(api_key, system_prompt, messages)
+            logger.info("Gemini chat succeeded with %s key", key_name)
+            return result
+        except Exception as exc:
+            logger.warning("Gemini chat failed with %s key: %s", key_name, exc)
+            last_error = exc
+
+    logger.error("All Gemini keys failed for chat. Last error: %s", last_error)
+    raise last_error or ValueError("No Gemini API keys available")
+
+
+async def _call_gemini_with_key(
+    api_key: str,
+    system_prompt: str,
+    messages: list[dict[str, str]],
+) -> str:
+    """Call Gemini with a specific API key."""
     try:
         from google import genai
         from google.genai import types
 
-        client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        client = genai.Client(api_key=api_key)
 
         # Build contents list for Gemini
         contents: list[types.Content] = []
@@ -426,6 +442,4 @@ async def _call_gemini(
             "The AI assistant requires the google-genai package. "
             "Please install it: pip install google-genai"
         )
-    except Exception as exc:
-        logger.error("Gemini API error: %s", exc)
-        raise
+

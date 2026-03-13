@@ -1,21 +1,26 @@
 /**
- * useSSE — Server-Sent Events hook.
+ * useSSE — Server-Sent Events hook with exponential backoff.
  *
  * Connects to /api/dashboard/stream?token={jwt}.
- * Auto-reconnects on disconnect after 3 seconds.
+ * Auto-reconnects with exponential backoff (1s, 2s, 4s, … max 30s).
  *
- * Returns: { events, latestEvent, isConnected }
+ * Returns: { events, latestEvent, isConnected, reconnecting }
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 
+const MIN_RETRY_MS = 1000
+const MAX_RETRY_MS = 30000
+
 export function useSSE(token) {
-  const [events, setEvents]           = useState([])
-  const [latestEvent, setLatestEvent] = useState(null)
-  const [isConnected, setIsConnected] = useState(false)
-  const esRef       = useRef(null)
-  const retryTimer  = useRef(null)
-  const mountedRef  = useRef(true)
+  const [events, setEvents]             = useState([])
+  const [latestEvent, setLatestEvent]   = useState(null)
+  const [isConnected, setIsConnected]   = useState(false)
+  const [reconnecting, setReconnecting] = useState(false)
+  const esRef         = useRef(null)
+  const retryTimer    = useRef(null)
+  const retryDelay    = useRef(MIN_RETRY_MS)
+  const mountedRef    = useRef(true)
 
   const connect = useCallback(() => {
     if (!token || !mountedRef.current) return
@@ -31,7 +36,10 @@ export function useSSE(token) {
     esRef.current = es
 
     es.onopen = () => {
-      if (mountedRef.current) setIsConnected(true)
+      if (!mountedRef.current) return
+      setIsConnected(true)
+      setReconnecting(false)
+      retryDelay.current = MIN_RETRY_MS  // Reset backoff on success
     }
 
     es.onmessage = (e) => {
@@ -48,12 +56,16 @@ export function useSSE(token) {
     es.onerror = () => {
       if (!mountedRef.current) return
       setIsConnected(false)
+      setReconnecting(true)
       es.close()
       esRef.current = null
-      // Auto-reconnect after 3 seconds
+
+      // Exponential backoff: 1s, 2s, 4s, 8s, … max 30s
+      const delay = retryDelay.current
       retryTimer.current = setTimeout(() => {
         if (mountedRef.current) connect()
-      }, 3000)
+      }, delay)
+      retryDelay.current = Math.min(delay * 2, MAX_RETRY_MS)
     }
   }, [token])
 
@@ -71,5 +83,5 @@ export function useSSE(token) {
     }
   }, [token, connect])
 
-  return { events, latestEvent, isConnected }
+  return { events, latestEvent, isConnected, reconnecting }
 }

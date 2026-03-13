@@ -97,8 +97,15 @@ export const mockApprove = (claimId) =>
 
 // ── AI Assistant ──────────────────────────────────────────────────────────────
 
-export const sendChat = (claimId, message, history) =>
-  api.post('/assistant/chat', { claim_id: claimId, message, history })
+export const sendChat = (claimId, message, conversationHistory = []) =>
+  api.post('/assistant/chat', {
+    claim_id: claimId,
+    message,
+    conversation_history: (conversationHistory || []).map(m => ({
+      role: m.role,
+      content: m.content || m.text || '',
+    })),
+  })
 
 // ── Notifications ─────────────────────────────────────────────────────────────
 
