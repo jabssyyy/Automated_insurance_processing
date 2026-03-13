@@ -95,7 +95,16 @@ export const submitClaim = (claimId) =>
 export const mockApprove = (claimId) =>
   api.post(`/m3/mock-approve/${claimId}`)
 
-// ── AI Assistant ──────────────────────────────────────────────────────────────
+// ── AI Assistant ──────────────────────────────────────────────────────
+
+export const extractBillData = (file) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return api.post('/pipeline/extract-bill', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000, // Gemini extraction can take longer
+  })
+}
 
 export const sendChat = (claimId, message, conversationHistory = []) =>
   api.post('/assistant/chat', {

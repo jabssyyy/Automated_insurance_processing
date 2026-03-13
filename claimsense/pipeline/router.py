@@ -16,7 +16,7 @@ import asyncio
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -563,3 +563,62 @@ async def _run_post_review_steps(
         "steps_completed": steps_completed,
         "paused": False,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# POST /extract-bill — Gemini bill extraction for hospital staff
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@router.post("/extract-bill", summary="Extract structured data from an uploaded bill")
+async def extract_bill(
+    file: UploadFile = File(...),
+) -> dict[str, Any]:
+    """
+    Accept an uploaded file (PDF, JPG, PNG) representing a hospital bill.
+    Send it to Gemini 2.0 Flash for structured data extraction.
+    Returns extracted fields: patient_name, hospital_name, doctor, items, etc.
+    Uses dual API key fallback.
+    """
+    import tempfile
+    import os
+
+    # Save uploaded file temporarily
+    suffix = os.path.splitext(file.filename or "file")[1] or ".pdf"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    mime_type = file.content_type or "application/pdf"
+
+    try:
+        from m1.gemini_extract import extract_from_document
+        result = await extract_from_document(tmp_path, mime_type)
+        logger.info("Bill extraction succeeded for %s", file.filename)
+        return {"success": True, "extracted": result}
+    except Exception as exc:
+        logger.warning("Gemini bill extraction failed: %s — returning demo data", exc)
+        # Return demo fallback data so the form can still be used
+        return {
+            "success": False,
+            "error": str(exc),
+            "extracted": {
+                "patient_name": "",
+                "patient_id": "",
+                "hospital_name": "",
+                "doctor_name": "",
+                "diagnosis_codes": [],
+                "procedure_codes": [],
+                "admission_date": "",
+                "discharge_date": "",
+                "billing_items": [],
+                "total_amount": 0,
+            },
+        }
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+

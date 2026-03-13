@@ -45,6 +45,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await _seed_demo_users()
     logger.info("✅ Demo users seeded.")
 
+    # Log Gemini API key status
+    if settings.GEMINI_API_KEY:
+        logger.info("✅ Gemini API key loaded: %s...", settings.GEMINI_API_KEY[:8])
+    else:
+        logger.warning("⚠️ GEMINI_API_KEY is empty — chatbot and AI features will not work!")
+    if getattr(settings, 'GEMINI_API_KEY_BACKUP', ''):
+        logger.info("✅ Gemini backup key loaded: %s...", settings.GEMINI_API_KEY_BACKUP[:8])
+    else:
+        logger.info("ℹ️ GEMINI_API_KEY_BACKUP not set — no fallback key available.")
+
     yield  # app is running
 
     logger.info("👋 ClaimSense.ai shutting down.")

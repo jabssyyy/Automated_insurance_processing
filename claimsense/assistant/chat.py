@@ -349,11 +349,29 @@ async def chat(
     try:
         response_text = await _call_gemini(system_prompt, messages)
     except Exception as exc:
+        error_str = str(exc).lower()
         logger.error("Gemini API call failed for claim %s: %s", claim_id, exc)
-        response_text = (
-            "I'm sorry, I'm having trouble connecting to my AI service right now. "
-            "Please try again in a moment, or contact support if the issue persists."
-        )
+
+        if "429" in str(exc) or "resource_exhausted" in error_str or "quota" in error_str:
+            response_text = (
+                "The AI service has temporarily exceeded its usage quota. "
+                "Please try again in a minute or two. If this keeps happening, "
+                "the API key may need a billing upgrade."
+            )
+        elif "401" in str(exc) or "403" in str(exc) or "invalid" in error_str or "api_key" in error_str:
+            response_text = (
+                "The AI service API key appears to be invalid or expired. "
+                "Please check the GEMINI_API_KEY configuration."
+            )
+        elif "not found" in error_str or "404" in str(exc):
+            response_text = (
+                "The AI model could not be found. Please verify the model name is correct."
+            )
+        else:
+            response_text = (
+                f"I'm sorry, I encountered an error connecting to the AI service: "
+                f"{type(exc).__name__}. Please try again in a moment."
+            )
 
     return response_text
 

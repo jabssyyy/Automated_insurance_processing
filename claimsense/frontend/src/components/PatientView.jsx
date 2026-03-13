@@ -302,10 +302,11 @@ export default function PatientView() {
   // Determine which phase to show
   const claimId = claim?.claim_id
   const isTerminal = currentStatus === 'APPROVED' || currentStatus === 'DENIED'
-  // Show wizard only when there's genuinely no active claim
-  const hasNoClaim = (!claimId && !loading) || (isTerminal && !loading && showNewForm)
-  // Show tracking phase for ANY existing claim with a status (including DOCUMENTS_MISSING)
-  const isTrackingPhase = claimId && currentStatus && !showNewForm
+  // Show wizard when there's no claim OR when the claim is still at DOCUMENTS_MISSING (upload phase)
+  const isUploadPhase = claimId && currentStatus === 'DOCUMENTS_MISSING'
+  const hasNoClaim = ((!claimId && !loading) || (isTerminal && !loading && showNewForm)) && !isUploadPhase
+  // Show tracking phase for claims past the upload stage
+  const isTrackingPhase = claimId && currentStatus && currentStatus !== 'DOCUMENTS_MISSING' && !showNewForm
 
   // Fetch claim data
   const fetchData = useCallback(async () => {
@@ -316,6 +317,11 @@ export default function PatientView() {
         const c = claims[0]
         setClaim(c)
         setCurrentStatus(c.current_status)
+        // If existing claim is still at DOCUMENTS_MISSING, jump to upload step
+        if (c.current_status === 'DOCUMENTS_MISSING') {
+          setWizardStep(2)
+          setSelectedPolicy(c.policy_number || c.claim_json?.policy_number || '')
+        }
         // Check for AI summary
         if (c.claim_json?.ai_analysis?.policyholder_summary) {
           setAiSummary(c.claim_json.ai_analysis.policyholder_summary)
@@ -537,7 +543,7 @@ export default function PatientView() {
         <main className="flex-1 max-w-4xl mx-auto w-full px-6 py-6">
 
           {/* ── Wizard: Steps 1-3 ──────────────────────────────────── */}
-          {hasNoClaim && (
+          {(hasNoClaim || isUploadPhase) && (
             <div className="max-w-2xl mx-auto">
               <WizardSteps currentStep={wizardStep} />
 
@@ -611,7 +617,7 @@ export default function PatientView() {
               )}
 
               {/* ── Step 2: Upload Documents + Submit ─────── */}
-              {wizardStep === 2 && claimId && (
+              {(wizardStep === 2 || isUploadPhase) && claimId && (
                 <div>
                   <div className="text-center mb-6">
                     <h2 className="text-xl font-bold text-slate-900">Upload Documents & Submit</h2>
