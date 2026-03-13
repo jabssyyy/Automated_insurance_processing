@@ -219,8 +219,7 @@ async def get_active_claims(
         user = user_result.scalar_one_or_none()
         if user and user.hospital_id:
             query = query.where(Claim.hospital_id == user.hospital_id)
-        else:
-            return []
+        # If hospital_id is None (demo mode), show all claims
     elif role == "insurer":
         # In demo mode, insurer sees all claims (no insurer_id filtering)
         pass
@@ -240,12 +239,17 @@ async def get_active_claims(
         if c.claim_json and isinstance(c.claim_json, dict):
             patient_name = c.claim_json.get("patient_name", "Unknown")
 
+        cj = c.claim_json if c.claim_json and isinstance(c.claim_json, dict) else {}
         active_list.append({
             "claim_id": c.id,
             "current_status": c.status.value if hasattr(c.status, "value") else str(c.status),
             "patient_name": patient_name,
             "total_amount": float(c.total_amount) if c.total_amount else None,
             "created_at": c.created_at.isoformat() if c.created_at else None,
+            "claim_json": cj,
+            "policy_number": cj.get("policy_number", None),
+            "path": cj.get("path", getattr(c, 'path', None)),
+            "claim_type": cj.get("claim_type", getattr(c, 'claim_type', None)),
         })
 
     return active_list
