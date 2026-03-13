@@ -24,6 +24,7 @@ import { useSSE } from '../hooks/useSSE.jsx'
 import StatusTimeline from './StatusTimeline'
 import NotificationPanel from './NotificationPanel'
 import ClaimDocUpload from './ClaimDocUpload'
+import StatusToast from './StatusToast'
 import {
   getClaims, getTimeline, createClaim, runPipeline,
   uploadDocuments, sendChat
@@ -762,6 +763,9 @@ export default function PatientView() {
 
       {/* Floating chat button */}
       {claimId && <ChatAssistant claimId={claimId} />}
+
+      {/* Toast notifications for status changes */}
+      <StatusToast latestEvent={latestEvent} />
     </div>
   )
 }

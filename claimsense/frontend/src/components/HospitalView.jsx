@@ -23,6 +23,7 @@ import {
 } from '../services/api.jsx'
 import StatusTimeline from './StatusTimeline'
 import NotificationPanel from './NotificationPanel'
+import StatusToast from './StatusToast'
 
 // ── Status chip colors ──────────────────────────────────────────────
 const STATUS_CHIP = {
@@ -696,6 +697,8 @@ export default function HospitalView() {
           </main>
         </div>
       )}
+      {/* Toast notifications for status changes */}
+      <StatusToast latestEvent={latestEvent} />
     </div>
   )
 }
