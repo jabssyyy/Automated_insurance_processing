@@ -14,6 +14,7 @@ class Settings(BaseSettings):
 
     # ── Gemini AI ──────────────────────────────────────────────────────
     GEMINI_API_KEY: str = ""
+    GEMINI_API_KEY_BACKUP: str = ""
 
     # ── Database (SQLite) ──────────────────────────────────────────────
     DATABASE_URL: str = "sqlite+aiosqlite:///./claimsense.db"

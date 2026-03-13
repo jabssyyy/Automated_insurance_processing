@@ -232,6 +232,52 @@ async def process_claim(
 
     await asyncio.sleep(STAGE_DELAY)
 
+    # ── Step 3.5: Gemini AI Analysis (dual-output) ─────────────────────
+    try:
+        from m1.gemini_analysis import analyze_claim as run_ai_analysis
+        # Build policy details from claim_json
+        policy_details = {
+            "policy_number": claim.claim_json.get("policy_number", "Unknown"),
+            "sum_insured": claim.claim_json.get("sum_insured", 1000000),
+            "policy_type": claim.claim_json.get("policy_type", "comprehensive"),
+            "claim_type": claim.claim_json.get("claim_type", "reimbursement"),
+        }
+        ai_result = await run_ai_analysis(
+            claim_json=claim.claim_json or {},
+            policy_details=policy_details,
+            claim_type=claim.claim_json.get("claim_type", "reimbursement"),
+        )
+        # Store AI analysis in claim_json
+        updated_json = dict(claim.claim_json or {})
+        updated_json["ai_analysis"] = ai_result
+        claim.claim_json = updated_json
+        await db.flush()
+        steps_completed.append("ai_analysis")
+        logger.info("AI analysis completed for claim %s", claim_id)
+    except Exception as exc:
+        logger.error("AI analysis failed for %s: %s", claim_id, exc)
+        # Non-fatal: continue pipeline even if AI analysis fails
+        updated_json = dict(claim.claim_json or {})
+        updated_json["ai_analysis"] = {
+            "policyholder_summary": {
+                "outcome": "Needs Further Review",
+                "reason": "AI analysis temporarily unavailable. Claim will be reviewed manually.",
+            },
+            "insurer_report": {
+                "recommendation": "Investigate Further",
+                "reasoning": f"AI analysis failed: {exc}",
+                "red_flags": [f"AI analysis error: {exc}"],
+                "document_review": [],
+                "rule_checks": [],
+            },
+            "ai_error": str(exc),
+        }
+        claim.claim_json = updated_json
+        await db.flush()
+        steps_completed.append("ai_analysis_fallback")
+
+    await asyncio.sleep(STAGE_DELAY)
+
     # ── Step 4: Review check ──────────────────────────────────────────
     try:
         from review.router import check_review_needed

@@ -23,21 +23,33 @@ from shared.config import get_settings
 logger = logging.getLogger("claimsense.m1.extract")
 settings = get_settings()
 
-# ── Gemini client ─────────────────────────────────────────────────────────────
+# ── Gemini clients (primary + backup) ─────────────────────────────────────
 
-_client = None
+_client_primary = None
+_client_backup = None
 MODEL = "gemini-2.0-flash"
 
 
 def _get_client() -> genai.Client:
-    """Lazy-init the Gemini client so the module imports even without an API key."""
-    global _client
-    if _client is None:
+    """Lazy-init the primary Gemini client."""
+    global _client_primary
+    if _client_primary is None:
         api_key = settings.GEMINI_API_KEY
         if not api_key:
             raise ValueError("GEMINI_API_KEY is not set. Configure it in .env.")
-        _client = genai.Client(api_key=api_key)
-    return _client
+        _client_primary = genai.Client(api_key=api_key)
+    return _client_primary
+
+
+def _get_backup_client() -> genai.Client:
+    """Lazy-init the backup Gemini client for failover."""
+    global _client_backup
+    if _client_backup is None:
+        api_key = settings.GEMINI_API_KEY_BACKUP
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY_BACKUP is not set. Configure it in .env.")
+        _client_backup = genai.Client(api_key=api_key)
+    return _client_backup
 
 # ── Extraction prompt ─────────────────────────────────────────────────────────
 
@@ -112,10 +124,27 @@ async def extract_from_document(
     file_bytes = _read_file(file_path)
 
     try:
+        return await _extract_with_client(_get_client(), file_path, mime_type, file_bytes)
+    except Exception as primary_exc:
+        logger.warning("Primary Gemini key failed for %s: %s — trying backup key", file_path, primary_exc)
+        try:
+            return await _extract_with_client(_get_backup_client(), file_path, mime_type, file_bytes)
+        except Exception as backup_exc:
+            logger.error("Both Gemini keys failed for %s. Primary: %s, Backup: %s", file_path, primary_exc, backup_exc)
+            raise ValueError(f"Gemini API error (both keys failed): {backup_exc}") from backup_exc
+
+
+async def _extract_with_client(
+    client: genai.Client,
+    file_path: str,
+    mime_type: str,
+    file_bytes: bytes,
+) -> dict[str, Any]:
+    """Run extraction with a specific Gemini client."""
+    try:
         # Build the content parts
         if mime_type == "application/pdf":
-            # Upload PDF to Gemini for processing
-            uploaded_file = _get_client().files.upload(
+            uploaded_file = client.files.upload(
                 file=file_path,
                 config=genai_types.UploadFileConfig(mime_type=mime_type),
             )
@@ -127,14 +156,13 @@ async def extract_from_document(
                 genai_types.Part.from_text(text=EXTRACTION_PROMPT),
             ]
         else:
-            # Images: send as inline bytes
             parts = [
                 genai_types.Part.from_bytes(data=file_bytes, mime_type=mime_type),
                 genai_types.Part.from_text(text=EXTRACTION_PROMPT),
             ]
 
         # First attempt
-        response = _get_client().models.generate_content(
+        response = client.models.generate_content(
             model=MODEL,
             contents=genai_types.Content(parts=parts),
         )
@@ -150,7 +178,7 @@ async def extract_from_document(
         retry_parts = parts + [
             genai_types.Part.from_text(text=f"\n\nYour previous response:\n{raw_text}\n\n{STRICT_RETRY_PROMPT}"),
         ]
-        response2 = _get_client().models.generate_content(
+        response2 = client.models.generate_content(
             model=MODEL,
             contents=genai_types.Content(parts=retry_parts),
         )

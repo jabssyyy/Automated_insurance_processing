@@ -1,10 +1,13 @@
 /**
  * PatientView — The patient screen.
  *
- * Three-phase flow:
- *   Phase 1: Create Claim  — pick policy & claim type → create
- *   Phase 2: Upload Docs   — drag-drop documents → submit for processing
- *   Phase 3: Live Tracking — pipeline stepper + status timeline + coverage
+ * Three-step claim creation wizard:
+ *   Step 1: Select Policy
+ *   Step 2: Select Claim Type (Reimbursement / Cashless)
+ *   Step 3: Upload Documents + Submit
+ *
+ * After submission → Confirmation screen with AI summary
+ * Then → Live tracking with pipeline stepper + timeline
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
@@ -13,17 +16,17 @@ import {
   ShieldCheck, LogOut, RefreshCw, AlertCircle,
   CheckCircle2, Clock, AlertTriangle, MessageCircle,
   X, Send, Loader2, ChevronRight, DollarSign,
-  FileText, Upload, Plus, Activity, ArrowRight,
+  FileText, Upload, Plus, Activity, ArrowRight, ArrowLeft,
   Zap, ClipboardCheck, Package, Truck, BadgeCheck, XCircle
 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth.jsx'
 import { useSSE } from '../hooks/useSSE.jsx'
 import StatusTimeline from './StatusTimeline'
 import NotificationPanel from './NotificationPanel'
-import DocumentUpload from './DocumentUpload'
+import ClaimDocUpload from './ClaimDocUpload'
 import {
   getClaims, getTimeline, createClaim, runPipeline,
-  continuePipeline, sendChat
+  uploadDocuments, sendChat
 } from '../services/api.jsx'
 
 
@@ -39,288 +42,99 @@ const PIPELINE_STAGES = [
   { key: 'SUBMITTED',           label: 'Submitted',     icon: Truck,         shortLabel: 'Submit' },
   { key: 'UNDER_INSURER_REVIEW',label: 'Insurer Review',icon: Clock,         shortLabel: 'Insurer' },
   { key: 'APPROVED',            label: 'Approved',      icon: BadgeCheck,    shortLabel: 'Done' },
-  { key: 'DENIED',              label: 'Denied',        icon: XCircle,       shortLabel: 'Denied' },
 ]
 
-const STAGE_ORDER = PIPELINE_STAGES.map(s => s.key)
-
-function getStageIndex(status) {
-  const idx = STAGE_ORDER.indexOf(status)
-  return idx >= 0 ? idx : -1
-}
-
-// ── Demo policy options ─────────────────────────────────────────────────────
-
 const DEMO_POLICIES = [
-  { number: 'STAR-HEALTH-2025-001', name: 'Star Health — Comprehensive Family Floater', sum_insured: '₹10,00,000' },
-  { number: 'HDFC-ERGO-2025-042',   name: 'HDFC Ergo — Optima Secure',               sum_insured: '₹5,00,000' },
-  { number: 'ICICI-LOMBARD-2025-017', name: 'ICICI Lombard — iHealth Plus',           sum_insured: '₹15,00,000' },
+  { number: 'STAR-HEALTH-2025-001', name: 'Star Comprehensive', sum_insured: '₹10,00,000', type: 'Comprehensive' },
+  { number: 'HDFC-ERGO-2025-042',   name: 'HDFC Ergo Optima',  sum_insured: '₹5,00,000',  type: 'Individual' },
+  { number: 'ICICI-LOMBARD-2025-77', name: 'ICICI Lombard iHealth', sum_insured: '₹15,00,000', type: 'Family Floater' },
 ]
 
 const CLAIM_TYPES = [
-  { key: 'inpatient', label: 'Inpatient',    desc: 'Hospital stay ≥ 24 hours', icon: '🏥' },
-  { key: 'daycare',   label: 'Day Care',     desc: 'Procedure < 24 hours',     icon: '⚡' },
-  { key: 'icu',       label: 'ICU',          desc: 'Intensive care unit stay',  icon: '🚑' },
+  { key: 'reimbursement', label: 'Reimbursement', desc: 'Claim after paying hospital', icon: '💰' },
+  { key: 'cashless', label: 'Cashless', desc: 'Direct settlement with hospital', icon: '🏥' },
 ]
 
 
-// ── Pipeline Stepper Component ──────────────────────────────────────────────
+// ── Pipeline Stepper ────────────────────────────────────────────────────────
 
 function PipelineStepper({ currentStatus }) {
-  const currentIdx = getStageIndex(currentStatus)
-  const isDenied = currentStatus === 'DENIED'
-  // Filter out DENIED from display if not denied
-  const stages = isDenied
-    ? PIPELINE_STAGES.filter(s => s.key !== 'APPROVED')
-    : PIPELINE_STAGES.filter(s => s.key !== 'DENIED')
+  const currentIdx = PIPELINE_STAGES.findIndex(s => s.key === currentStatus)
 
   return (
-    <div className="w-full overflow-x-auto pb-2">
-      <div className="flex items-center min-w-[700px]">
-        {stages.map((stage, idx) => {
-          const stageIdx = getStageIndex(stage.key)
-          const isCurrent = stage.key === currentStatus
-          const isDone = stageIdx < currentIdx && !isDenied
-          const isFailed = isDenied && stage.key === 'DENIED'
-          const isPast = stageIdx < currentIdx
-          const Icon = stage.icon
+    <div className="flex items-center gap-1 overflow-x-auto pb-2">
+      {PIPELINE_STAGES.map((stage, idx) => {
+        const Icon = stage.icon
+        const isDone = idx < currentIdx
+        const isCurrent = idx === currentIdx
+        const isFuture = idx > currentIdx
 
-          let dotClass = 'bg-slate-200 text-slate-400'
-          let lineClass = 'bg-slate-200'
-          let labelClass = 'text-slate-400'
-
-          if (isCurrent) {
-            dotClass = 'bg-blue-500 text-white ring-4 ring-blue-100 shadow-lg shadow-blue-200/50'
-            labelClass = 'text-blue-700 font-semibold'
-          } else if (isDone || isPast) {
-            dotClass = 'bg-green-500 text-white'
-            lineClass = 'bg-green-400'
-            labelClass = 'text-green-700'
-          } else if (isFailed) {
-            dotClass = 'bg-red-500 text-white ring-4 ring-red-100'
-            labelClass = 'text-red-700 font-semibold'
-          }
-
-          return (
-            <React.Fragment key={stage.key}>
-              {idx > 0 && (
-                <div className={`flex-1 h-0.5 mx-1 rounded-full transition-all duration-700 ${isPast || isDone ? 'bg-green-400' : isCurrent ? 'bg-blue-300' : 'bg-slate-200'}`} />
-              )}
-              <div className="flex flex-col items-center gap-1.5 min-w-[60px]">
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-500 ${dotClass}`}>
-                  {isCurrent && !isDone ? (
-                    <div className="relative">
-                      <Icon className="w-4 h-4" />
-                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping" />
-                    </div>
-                  ) : isDone ? (
-                    <CheckCircle2 className="w-4 h-4" />
-                  ) : (
-                    <Icon className="w-4 h-4" />
-                  )}
-                </div>
-                <span className={`text-[10px] leading-tight text-center transition-colors duration-300 ${labelClass}`}>
-                  {stage.shortLabel}
-                </span>
+        return (
+          <React.Fragment key={stage.key}>
+            <div className={`flex flex-col items-center min-w-[60px] ${isFuture ? 'opacity-40' : ''}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                isDone ? 'bg-green-100 text-green-600' :
+                isCurrent ? 'bg-blue-100 text-blue-600 ring-2 ring-blue-200 animate-pulse' :
+                'bg-slate-100 text-slate-400'
+              }`}>
+                {isDone ? <CheckCircle2 className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
               </div>
-            </React.Fragment>
-          )
-        })}
-      </div>
+              <span className={`text-[9px] mt-1 text-center font-semibold leading-tight ${
+                isCurrent ? 'text-blue-600' : isDone ? 'text-green-600' : 'text-slate-400'
+              }`}>
+                {stage.shortLabel}
+              </span>
+            </div>
+            {idx < PIPELINE_STAGES.length - 1 && (
+              <div className={`flex-1 h-0.5 min-w-[12px] rounded ${
+                idx < currentIdx ? 'bg-green-300' : 'bg-slate-200'
+              }`} />
+            )}
+          </React.Fragment>
+        )
+      })}
     </div>
   )
 }
 
 
-// ── Phase 1: New Claim Form ───────────────────────────────────────────────────
-
-function NewClaimForm({ onClaimCreated }) {
-  const [selectedPolicy, setSelectedPolicy] = useState('')
-  const [claimType, setClaimType] = useState('inpatient')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-
-  const handleCreate = async () => {
-    if (!selectedPolicy) {
-      setError('Please select a policy')
-      return
-    }
-    setError(null)
-    setLoading(true)
-    try {
-      const res = await createClaim(selectedPolicy, claimType)
-      onClaimCreated(res.data.claim_id)
-    } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to create claim')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="max-w-2xl mx-auto">
-      {/* Welcome card */}
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 shadow-xl shadow-blue-200/50 mb-4">
-          <Plus className="w-8 h-8 text-white" />
-        </div>
-        <h2 className="text-2xl font-bold text-slate-900">File a New Claim</h2>
-        <p className="text-slate-500 mt-2 text-sm">Select your policy and claim type to get started</p>
-      </div>
-
-      {error && (
-        <div className="mb-6 flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          {error}
-        </div>
-      )}
-
-      {/* Policy selector */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-5">
-        <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-blue-500" />
-          Select Your Policy
-        </h3>
-        <div className="space-y-3">
-          {DEMO_POLICIES.map((p) => (
-            <button
-              key={p.number}
-              onClick={() => setSelectedPolicy(p.number)}
-              className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${
-                selectedPolicy === p.number
-                  ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100 shadow-sm'
-                  : 'border-slate-100 hover:border-blue-200 hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">{p.name}</p>
-                  <p className="text-xs text-slate-500 mt-1 font-mono">{p.number}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-slate-400">Sum Insured</p>
-                  <p className="text-sm font-bold text-slate-700">{p.sum_insured}</p>
-                </div>
-              </div>
-              {selectedPolicy === p.number && (
-                <div className="mt-2 flex items-center gap-1 text-xs text-blue-600 font-medium">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Selected
-                </div>
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Claim type selector */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-6">
-        <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-          <Activity className="w-4 h-4 text-blue-500" />
-          Claim Type
-        </h3>
-        <div className="grid grid-cols-3 gap-3">
-          {CLAIM_TYPES.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setClaimType(t.key)}
-              className={`p-4 rounded-xl border-2 text-center transition-all duration-200 ${
-                claimType === t.key
-                  ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100'
-                  : 'border-slate-100 hover:border-blue-200'
-              }`}
-            >
-              <span className="text-2xl block mb-2">{t.icon}</span>
-              <p className="text-sm font-semibold text-slate-800">{t.label}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{t.desc}</p>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Submit */}
-      <button
-        onClick={handleCreate}
-        disabled={loading || !selectedPolicy}
-        className="w-full flex items-center justify-center gap-2.5 py-3.5 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold shadow-lg shadow-blue-200/50 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-xl"
-      >
-        {loading ? (
-          <><Loader2 className="w-5 h-5 animate-spin" /> Creating Claim…</>
-        ) : (
-          <><ArrowRight className="w-5 h-5" /> Create Claim & Upload Documents</>
-        )}
-      </button>
-    </div>
-  )
-}
-
-
-// ── Coverage display ──────────────────────────────────────────────────────────
+// ── Coverage Display ────────────────────────────────────────────────────────
 
 function CoverageDisplay({ claim }) {
   const m2 = claim?.claim_json?.m2_validation
-  if (!m2) {
-    return (
-      <div className="text-center py-6 text-slate-400 text-sm">
-        Coverage check not yet completed.
-      </div>
-    )
+  if (!m2?.coverage_results?.length) {
+    return <p className="text-xs text-slate-400 italic">Coverage details will appear after policy validation.</p>
   }
-
-  const { patient_summary, coverage_results = [] } = m2
-  const copayResult = coverage_results.find((r) => r.rule_name === 'copay_calculation')
-
   return (
-    <div className="space-y-4">
-      {patient_summary && (
-        <div className="text-sm text-slate-700 leading-relaxed bg-blue-50 rounded-xl p-4 border border-blue-100">
-          {patient_summary}
-        </div>
-      )}
-      {copayResult && copayResult.amount_inr > 0 && (
-        <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
-          <div className="p-2 bg-amber-100 rounded-lg">
-            <DollarSign className="w-5 h-5 text-amber-600" />
-          </div>
-          <div>
-            <p className="text-xs text-amber-700 font-medium">Your Co-pay Amount</p>
-            <p className="text-lg font-bold text-amber-900">
-              ₹{copayResult.amount_inr.toLocaleString('en-IN')}
-            </p>
+    <div className="space-y-2">
+      {m2.coverage_results.map((r, i) => (
+        <div key={i} className="flex items-center gap-2 py-1.5 px-3 rounded-lg bg-slate-50 border border-slate-100">
+          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+            r.status === 'PASS' ? 'bg-green-100 text-green-600' :
+            r.status === 'WARNING' ? 'bg-amber-100 text-amber-600' :
+            'bg-red-100 text-red-600'
+          }`}>
+            {r.status === 'PASS' ? '✓' : r.status === 'WARNING' ? '!' : '✗'}
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium text-slate-700 truncate">{r.rule_name?.replace(/_/g, ' ')}</p>
+            <p className="text-[10px] text-slate-500 truncate">{r.reason}</p>
           </div>
         </div>
-      )}
-      <div className="space-y-2">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Coverage Rules</p>
-        {coverage_results.filter((r) => r.rule_name !== 'copay_calculation').map((rule, i) => (
-          <div key={i} className="flex items-start gap-2.5 py-2 px-3 rounded-lg bg-slate-50 border border-slate-100">
-            <span className={`mt-0.5 shrink-0 text-xs font-bold px-1.5 py-0.5 rounded-md ${rule.status === 'PASS' ? 'bg-green-100 text-green-700' :
-                rule.status === 'FAIL' ? 'bg-red-100 text-red-700' :
-                  'bg-amber-100 text-amber-700'
-              }`}>
-              {rule.status}
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-slate-700 capitalize">
-                {rule.rule_name.replace(/_/g, ' ')}
-              </p>
-              <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{rule.reason}</p>
-            </div>
-          </div>
-        ))}
-      </div>
+      ))}
     </div>
   )
 }
 
 
-// ── Chat assistant drawer ─────────────────────────────────────────────────────
+// ── Chat Assistant ──────────────────────────────────────────────────────────
 
 function ChatAssistant({ claimId }) {
   const [open, setOpen] = useState(false)
-  const [input, setInput] = useState('')
   const [messages, setMessages] = useState([
-    { role: 'assistant', text: 'Hi! I can help you understand your claim status and coverage. What would you like to know?' }
+    { role: 'assistant', text: 'Hello! I can help you understand your claim status, coverage details, or answer any questions about the process.' }
   ])
+  const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const bottomRef = useRef(null)
 
@@ -329,18 +143,17 @@ function ChatAssistant({ claimId }) {
   }, [messages])
 
   const handleSend = async () => {
-    const msg = input.trim()
-    if (!msg || loading) return
+    const text = input.trim()
+    if (!text || loading) return
     setInput('')
-    const newMessages = [...messages, { role: 'user', text: msg }]
-    setMessages(newMessages)
+    setMessages(prev => [...prev, { role: 'user', text }])
     setLoading(true)
     try {
-      const history = newMessages.slice(0, -1).map((m) => ({ role: m.role, content: m.text }))
-      const res = await sendChat(claimId, msg, history)
-      setMessages([...newMessages, { role: 'assistant', text: res.data?.reply || res.data?.message || 'Sorry, I could not get a response.' }])
+      const res = await sendChat(claimId, text, messages)
+      const reply = res.data?.response || res.data?.reply || 'I could not process that. Please try again.'
+      setMessages(prev => [...prev, { role: 'assistant', text: reply }])
     } catch {
-      setMessages([...newMessages, { role: 'assistant', text: 'I\'m having trouble connecting to the assistant. Please try again.' }])
+      setMessages(prev => [...prev, { role: 'assistant', text: 'Sorry, I encountered an error. Please try again.' }])
     } finally {
       setLoading(false)
     }
@@ -348,14 +161,14 @@ function ChatAssistant({ claimId }) {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white shadow-xl shadow-blue-300/30 flex items-center justify-center transition-all hover:scale-110 z-40"
-        title="Chat with AI Assistant"
-      >
-        <MessageCircle className="w-6 h-6" />
-      </button>
-
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gradient-to-br from-blue-600 to-blue-700 shadow-xl shadow-blue-200/50 flex items-center justify-center z-40 hover:scale-105 transition-transform"
+        >
+          <MessageCircle className="w-6 h-6 text-white" />
+        </button>
+      )}
       {open && (
         <div className="fixed inset-y-0 right-0 w-full max-w-sm bg-white shadow-2xl border-l border-slate-100 flex flex-col z-50">
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-blue-600 to-blue-700">
@@ -413,6 +226,46 @@ function ChatAssistant({ claimId }) {
 }
 
 
+// ── Wizard Step Indicator ───────────────────────────────────────────────────
+
+function WizardSteps({ currentStep }) {
+  const steps = [
+    { num: 1, label: 'Select Policy' },
+    { num: 2, label: 'Claim Type' },
+    { num: 3, label: 'Upload & Submit' },
+  ]
+
+  return (
+    <div className="flex items-center justify-center gap-2 mb-8">
+      {steps.map((step, idx) => (
+        <React.Fragment key={step.num}>
+          <div className="flex items-center gap-2">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+              step.num < currentStep ? 'bg-green-500 text-white' :
+              step.num === currentStep ? 'bg-blue-600 text-white ring-2 ring-blue-200' :
+              'bg-slate-200 text-slate-500'
+            }`}>
+              {step.num < currentStep ? <CheckCircle2 className="w-4 h-4" /> : step.num}
+            </div>
+            <span className={`text-xs font-semibold hidden sm:inline ${
+              step.num === currentStep ? 'text-blue-600' :
+              step.num < currentStep ? 'text-green-600' : 'text-slate-400'
+            }`}>
+              {step.label}
+            </span>
+          </div>
+          {idx < steps.length - 1 && (
+            <div className={`w-12 h-0.5 rounded ${
+              step.num < currentStep ? 'bg-green-400' : 'bg-slate-200'
+            }`} />
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  )
+}
+
+
 // ── Patient visible statuses ────────────────────────────────────────────────
 
 const PATIENT_VISIBLE = new Set([
@@ -430,6 +283,7 @@ export default function PatientView() {
   const navigate = useNavigate()
   const { latestEvent } = useSSE(token)
 
+  // Core state
   const [claim, setClaim] = useState(null)
   const [timeline, setTimeline] = useState([])
   const [loading, setLoading] = useState(true)
@@ -438,12 +292,22 @@ export default function PatientView() {
   const [pipelineError, setPipelineError] = useState(null)
   const [demoMode, setDemoMode] = useState(false)
   const [showNewForm, setShowNewForm] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState(null)
+
+  // Wizard state
+  const [wizardStep, setWizardStep] = useState(1)
+  const [selectedPolicy, setSelectedPolicy] = useState('')
+  const [claimType, setClaimType] = useState('reimbursement')
+  const [wizardError, setWizardError] = useState(null)
+  const [creatingClaim, setCreatingClaim] = useState(false)
+
+  // AI analysis result for confirmation screen
+  const [aiSummary, setAiSummary] = useState(null)
 
   // Determine which phase to show
   const claimId = claim?.claim_id
   const isTerminal = currentStatus === 'APPROVED' || currentStatus === 'DENIED'
   const hasNoClaim = (!claimId && !loading) || (isTerminal && !loading && showNewForm)
-  const isUploadPhase = claimId && currentStatus === 'DOCUMENTS_MISSING' && !showNewForm
   const isTrackingPhase = claimId && currentStatus && currentStatus !== 'DOCUMENTS_MISSING' && !showNewForm
 
   // Fetch claim data
@@ -455,6 +319,10 @@ export default function PatientView() {
         const c = claims[0]
         setClaim(c)
         setCurrentStatus(c.current_status)
+        // Check for AI summary
+        if (c.claim_json?.ai_analysis?.policyholder_summary) {
+          setAiSummary(c.claim_json.ai_analysis.policyholder_summary)
+        }
         // Fetch timeline
         const tlRes = await getTimeline(c.claim_id)
         const rawTimeline = tlRes.data?.timeline || []
@@ -472,7 +340,7 @@ export default function PatientView() {
     fetchData()
   }, [fetchData])
 
-  // React to SSE events
+  // React to SSE events — auto-refresh
   useEffect(() => {
     if (!latestEvent) return
     const { status, detail } = latestEvent
@@ -482,8 +350,9 @@ export default function PatientView() {
         const entry = { status, detail, timestamp: latestEvent.timestamp, id: Date.now() }
         return [...prev, entry]
       })
-      // Auto-refresh claim data when we get meaningful status updates
-      if (['APPROVED', 'DENIED', 'DOCUMENTS_COMPLETE'].includes(status)) {
+      setLastUpdated(new Date())
+      // Auto-refresh claim data on meaningful status updates
+      if (['APPROVED', 'DENIED', 'DOCUMENTS_COMPLETE', 'UNDER_HUMAN_REVIEW'].includes(status)) {
         fetchData()
       }
     }
@@ -494,11 +363,68 @@ export default function PatientView() {
     navigate('/')
   }
 
-  const handleClaimCreated = async (newClaimId) => {
-    setClaim({ claim_id: newClaimId, current_status: 'DOCUMENTS_MISSING' })
-    setCurrentStatus('DOCUMENTS_MISSING')
-    setShowNewForm(false)
-    setLoading(false)
+  // ── Step 1 → 2 ────────────────────────────────────────
+  const handlePolicyNext = () => {
+    if (!selectedPolicy) {
+      setWizardError('Please select a policy')
+      return
+    }
+    setWizardError(null)
+    setWizardStep(2)
+  }
+
+  // ── Step 2 → 3: Create claim in backend, then move to upload ──
+  const handleClaimTypeNext = async () => {
+    setWizardError(null)
+    setCreatingClaim(true)
+    try {
+      const res = await createClaim(selectedPolicy, 'inpatient', claimType)
+      const newClaimId = res.data?.claim_id
+      setClaim({ claim_id: newClaimId, current_status: 'DOCUMENTS_MISSING' })
+      setCurrentStatus('DOCUMENTS_MISSING')
+      setWizardStep(3)
+    } catch (err) {
+      // Demo mode fallback
+      const demoId = `CS-DEMO-${Date.now().toString(36).toUpperCase()}`
+      setClaim({ claim_id: demoId, current_status: 'DOCUMENTS_MISSING' })
+      setCurrentStatus('DOCUMENTS_MISSING')
+      setDemoMode(true)
+      setWizardStep(3)
+    } finally {
+      setCreatingClaim(false)
+    }
+  }
+
+  // ── Step 3: Upload docs + submit ──
+  const handleClaimSubmit = async (allFiles, ckycNumber) => {
+    const cid = claim?.claim_id
+    if (!cid) return
+
+    setPipelineRunning(true)
+    setPipelineError(null)
+
+    try {
+      // 1. Upload all files
+      const rawFiles = allFiles.map(f => f.file)
+      await uploadDocuments(cid, rawFiles)
+
+      // 2. Run full pipeline (includes AI analysis)
+      const res = await runPipeline(cid)
+      const data = res.data
+      if (data?.final_status) {
+        setCurrentStatus(data.final_status)
+      }
+
+      // 3. Refresh to get updated claim data + AI analysis
+      await fetchData()
+      setShowNewForm(false)
+    } catch (err) {
+      console.warn('Pipeline failed, running demo simulation:', err)
+      setDemoMode(true)
+      await simulatePipeline()
+    } finally {
+      setPipelineRunning(false)
+    }
   }
 
   const startNewClaim = () => {
@@ -507,9 +433,13 @@ export default function PatientView() {
     setTimeline([])
     setShowNewForm(true)
     setDemoMode(false)
+    setWizardStep(1)
+    setSelectedPolicy('')
+    setClaimType('reimbursement')
+    setAiSummary(null)
   }
 
-  // Demo pipeline simulation — runs locally when backend is down
+  // Demo pipeline simulation
   const simulatePipeline = async () => {
     const stages = [
       { status: 'DOCUMENTS_COMPLETE', detail: 'All documents received and verified', delay: 1200 },
@@ -525,50 +455,12 @@ export default function PatientView() {
       await new Promise(r => setTimeout(r, stage.delay))
       setCurrentStatus(stage.status)
       setTimeline(prev => [...prev, { status: stage.status, detail: stage.detail, timestamp: new Date().toISOString(), id: Date.now() }])
-      // Update claim with demo M2 data at policy validation step
       if (stage.status === 'POLICY_VALIDATING') {
-        setClaim(prev => ({
-          ...prev,
-          total_amount: 53000,
-          claim_json: {
-            ...prev?.claim_json,
-            hospital_name: 'Apollo Hospitals, Chennai',
-            m2_validation: {
-              patient_summary: 'Your claim for pneumonia treatment has been validated. All coverage rules passed. Your estimated co-pay is ₹5,300 (10% of total).',
-              coverage_results: [
-                { rule_name: 'policy_active', status: 'PASS', reason: 'Policy STAR-HEALTH-2025-001 is active' },
-                { rule_name: 'waiting_period', status: 'PASS', reason: '30-day waiting period satisfied' },
-                { rule_name: 'room_rent_limit', status: 'PASS', reason: 'Room charges ₹15,000 within ₹8,000/day limit' },
-                { rule_name: 'copay_calculation', status: 'PASS', reason: '10% co-pay applies', amount_inr: 5300 },
-                { rule_name: 'sum_insured_check', status: 'PASS', reason: 'Claim ₹53,000 within sum insured ₹10,00,000' },
-                { rule_name: 'pre_auth_required', status: 'WARNING', reason: 'ICU admission requires pre-authorization' },
-              ]
-            }
-          }
-        }))
+        setAiSummary({
+          outcome: 'Likely to be Approved',
+          reason: 'All mandatory documents present. Claim amount within policy limit.'
+        })
       }
-    }
-  }
-
-  const handleSubmitPipeline = async () => {
-    if (!claimId || pipelineRunning) return
-    setPipelineRunning(true)
-    setPipelineError(null)
-    try {
-      const res = await runPipeline(claimId)
-      const data = res.data
-      if (data?.final_status) {
-        setCurrentStatus(data.final_status)
-      }
-      // Refresh to get updated claim data
-      await fetchData()
-    } catch (err) {
-      // Fallback: simulate pipeline locally
-      console.warn('Pipeline API failed, simulating locally:', err)
-      setDemoMode(true)
-      await simulatePipeline()
-    } finally {
-      setPipelineRunning(false)
     }
   }
 
@@ -626,6 +518,11 @@ export default function PatientView() {
                 <Plus className="w-3.5 h-3.5" /> New Claim
               </button>
             )}
+            {lastUpdated && (
+              <span className="hidden sm:inline text-[10px] text-slate-400">
+                Updated {lastUpdated.toLocaleTimeString()}
+              </span>
+            )}
             <NotificationPanel />
             <button
               onClick={handleLogout}
@@ -647,73 +544,193 @@ export default function PatientView() {
           </div>
         </div>
       ) : (
-        <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-6">
+        <main className="flex-1 max-w-4xl mx-auto w-full px-6 py-6">
 
-          {/* ── Phase 1: No claim — show create form ─────────────────── */}
+          {/* ── Wizard: Steps 1-3 ──────────────────────────────────── */}
           {hasNoClaim && (
-            <NewClaimForm onClaimCreated={handleClaimCreated} />
-          )}
+            <div className="max-w-2xl mx-auto">
+              <WizardSteps currentStep={wizardStep} />
 
-          {/* ── Phase 2: Upload documents ────────────────────────────── */}
-          {isUploadPhase && (
-            <div className="max-w-3xl mx-auto space-y-6">
-              {/* Status banner */}
-              <div className={`flex items-start gap-4 p-5 rounded-2xl border-2 bg-gradient-to-r ${bannerCfg.color}`}>
-                <div className="shrink-0 mt-0.5">
-                  <BannerIcon className={`w-7 h-7 ${bannerCfg.iconColor}`} />
-                </div>
-                <div className="flex-1">
-                  <h2 className={`text-lg font-bold ${bannerCfg.textColor}`}>{bannerCfg.label}</h2>
-                  <p className={`text-sm mt-1 ${bannerCfg.textColor} opacity-80`}>
-                    Upload your hospital bills, discharge summary, and other documents to proceed.
-                  </p>
-                </div>
-              </div>
-
-              {/* Required documents checklist */}
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-                <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-blue-500" />
-                  Required Documents
-                </h3>
-                <div className="grid grid-cols-2 gap-2">
-                  {['Discharge Summary', 'Hospital Bills & Receipts', 'ID Proof (Aadhaar/PAN)', 'Lab Reports', 'Treatment Records', 'Prescription'].map((doc) => (
-                    <div key={doc} className="flex items-center gap-2 py-2 px-3 rounded-lg bg-slate-50 border border-slate-100">
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="text-sm text-slate-700">{doc}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Document upload */}
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-                <DocumentUpload claimId={claimId} onUploadComplete={fetchData} />
-              </div>
-
-              {/* Submit for processing button */}
-              <button
-                onClick={handleSubmitPipeline}
-                disabled={pipelineRunning}
-                className="w-full flex items-center justify-center gap-2.5 py-3.5 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold shadow-lg shadow-blue-200/50 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-xl"
-              >
-                {pipelineRunning ? (
-                  <><Loader2 className="w-5 h-5 animate-spin" /> Processing…</>
-                ) : (
-                  <><Zap className="w-5 h-5" /> Submit for AI Processing</>
-                )}
-              </button>
-
-              {pipelineError && (
-                <div className="flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
+              {wizardError && (
+                <div className="mb-6 flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
                   <AlertCircle className="w-4 h-4 shrink-0" />
-                  {pipelineError}
+                  {wizardError}
+                </div>
+              )}
+
+              {/* ── Step 1: Select Policy ─────────────────── */}
+              {wizardStep === 1 && (
+                <div>
+                  <div className="text-center mb-8">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 shadow-xl shadow-blue-200/50 mb-4">
+                      <Plus className="w-8 h-8 text-white" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-900">File a New Claim</h2>
+                    <p className="text-slate-500 mt-2 text-sm">Select your active insurance policy to get started</p>
+                  </div>
+
+                  <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-5">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-blue-500" />
+                      Your Active Policies
+                    </h3>
+                    <div className="space-y-3">
+                      {DEMO_POLICIES.map((p) => (
+                        <button
+                          key={p.number}
+                          onClick={() => setSelectedPolicy(p.number)}
+                          className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${
+                            selectedPolicy === p.number
+                              ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100 shadow-sm'
+                              : 'border-slate-100 hover:border-blue-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-800">{p.name}</p>
+                              <p className="text-xs text-slate-500 mt-1 font-mono">{p.number}</p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">{p.type}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs text-slate-400">Sum Insured</p>
+                              <p className="text-sm font-bold text-slate-700">{p.sum_insured}</p>
+                            </div>
+                          </div>
+                          {selectedPolicy === p.number && (
+                            <div className="mt-2 flex items-center gap-1 text-xs text-blue-600 font-medium">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Selected
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handlePolicyNext}
+                    disabled={!selectedPolicy}
+                    className="w-full flex items-center justify-center gap-2.5 py-3.5 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold shadow-lg shadow-blue-200/50 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-xl"
+                  >
+                    <ArrowRight className="w-5 h-5" /> Continue to Claim Type
+                  </button>
+                </div>
+              )}
+
+              {/* ── Step 2: Select Claim Type ─────────────── */}
+              {wizardStep === 2 && (
+                <div>
+                  <div className="text-center mb-8">
+                    <h2 className="text-xl font-bold text-slate-900">Select Claim Type</h2>
+                    <p className="text-slate-500 mt-2 text-sm">Choose how you'd like to file this claim</p>
+                  </div>
+
+                  <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-6">
+                    <div className="grid grid-cols-2 gap-4">
+                      {CLAIM_TYPES.map((t) => (
+                        <button
+                          key={t.key}
+                          onClick={() => setClaimType(t.key)}
+                          className={`p-6 rounded-xl border-2 text-center transition-all duration-200 ${
+                            claimType === t.key
+                              ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100'
+                              : 'border-slate-100 hover:border-blue-200'
+                          }`}
+                        >
+                          <span className="text-3xl block mb-3">{t.icon}</span>
+                          <p className="text-sm font-semibold text-slate-800">{t.label}</p>
+                          <p className="text-xs text-slate-500 mt-1">{t.desc}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setWizardStep(1)}
+                      className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl border-2 border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors"
+                    >
+                      <ArrowLeft className="w-4 h-4" /> Back
+                    </button>
+                    <button
+                      onClick={handleClaimTypeNext}
+                      disabled={creatingClaim}
+                      className="flex-[2] flex items-center justify-center gap-2 py-3 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold shadow-lg shadow-blue-200/50 transition-all duration-200 disabled:opacity-50"
+                    >
+                      {creatingClaim ? (
+                        <><Loader2 className="w-5 h-5 animate-spin" /> Creating Claim…</>
+                      ) : (
+                        <><ArrowRight className="w-5 h-5" /> Continue to Upload</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Step 3: Upload Documents + Submit ─────── */}
+              {wizardStep === 3 && claimId && (
+                <div>
+                  <div className="text-center mb-6">
+                    <h2 className="text-xl font-bold text-slate-900">Upload Documents & Submit</h2>
+                    <p className="text-slate-500 mt-2 text-sm">
+                      Upload your medical documents below. All 3 mandatory docs are required.
+                    </p>
+                    <p className="text-xs text-blue-600 font-medium mt-1">
+                      Claim ID: {claimId} · Policy: {selectedPolicy} · Type: {claimType}
+                    </p>
+                  </div>
+
+                  <ClaimDocUpload
+                    claimId={claimId}
+                    onSubmit={handleClaimSubmit}
+                    submitting={pipelineRunning}
+                  />
+
+                  {pipelineError && (
+                    <div className="mt-4 flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      {pipelineError}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           )}
 
-          {/* ── Phase 3: Live tracking ───────────────────────────────── */}
+          {/* ── AI Summary Confirmation (shows after submission) ─── */}
+          {aiSummary && isTrackingPhase && (
+            <div className={`mb-6 p-5 rounded-2xl border-2 ${
+              aiSummary.outcome?.includes('Approved')
+                ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200'
+                : aiSummary.outcome?.includes('Rejected')
+                  ? 'bg-gradient-to-r from-red-50 to-rose-50 border-red-200'
+                  : 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200'
+            }`}>
+              <div className="flex items-start gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                  aiSummary.outcome?.includes('Approved')
+                    ? 'bg-green-100'
+                    : aiSummary.outcome?.includes('Rejected')
+                      ? 'bg-red-100'
+                      : 'bg-amber-100'
+                }`}>
+                  <Zap className={`w-5 h-5 ${
+                    aiSummary.outcome?.includes('Approved')
+                      ? 'text-green-600'
+                      : aiSummary.outcome?.includes('Rejected')
+                        ? 'text-red-600'
+                        : 'text-amber-600'
+                  }`} />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">AI Assessment</p>
+                  <p className="text-base font-bold text-slate-900">{aiSummary.outcome}</p>
+                  <p className="text-sm text-slate-600 mt-1">{aiSummary.reason}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Live Tracking Phase ────────────────────────────────── */}
           {isTrackingPhase && (
             <div className="space-y-6">
               {/* Status banner */}
@@ -729,13 +746,6 @@ export default function PatientView() {
                     </p>
                   )}
                 </div>
-                <button
-                  onClick={fetchData}
-                  className="shrink-0 p-2 rounded-xl hover:bg-white/50 transition-colors"
-                  title="Refresh"
-                >
-                  <RefreshCw className="w-4 h-4 text-slate-500" />
-                </button>
               </div>
 
               {/* Pipeline stepper */}
@@ -759,7 +769,8 @@ export default function PatientView() {
                         { label: 'Status', value: currentStatus?.replace(/_/g, ' ') },
                         { label: 'Patient', value: claim?.patient_name || claim?.claim_json?.patient_name || '—' },
                         { label: 'Total Amount', value: claim?.total_amount ? `₹${Number(claim.total_amount).toLocaleString('en-IN')}` : '—' },
-                        { label: 'Submitted', value: claim?.created_at ? new Date(claim.created_at).toLocaleDateString('en-IN') : '—' },
+                        { label: 'Policy', value: claim?.claim_json?.policy_number || selectedPolicy || '—' },
+                        { label: 'Type', value: claim?.claim_json?.claim_type || claimType || '—' },
                       ].map(({ label, value }) => (
                         <div key={label}>
                           <dt className="text-xs text-slate-400 font-medium">{label}</dt>

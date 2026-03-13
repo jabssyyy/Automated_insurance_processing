@@ -58,25 +58,48 @@ const FILTERS = [
 
 // ── AI Recommendation parsing ───────────────────────────────────────
 function getAIRecommendation(claim) {
-  const m2 = claim?.claim_json?.m2_validation
-  if (!m2) return { type: 'pending', text: 'AI analysis pending…', details: [] }
+  const aiAnalysis = claim?.claim_json?.ai_analysis
+  const report = aiAnalysis?.insurer_report
 
-  const coverage = m2.coverage_results || []
-  const failedRules = coverage.filter(r => r.status === 'FAIL' || r.passed === false)
-  const allPass = failedRules.length === 0
+  // AI error — show retry state
+  if (aiAnalysis?.ai_error) {
+    return {
+      type: 'error',
+      text: 'AI analysis unavailable. Please retry.',
+      details: [aiAnalysis.ai_error],
+      report: null,
+    }
+  }
 
-  if (allPass) {
+  // No analysis yet — pending
+  if (!report) {
+    return { type: 'pending', text: 'AI analysis in progress…', details: [], report: null }
+  }
+
+  // Map recommendation to type
+  const rec = (report.recommendation || '').toLowerCase()
+  if (rec.includes('approve')) {
     return {
       type: 'approve',
-      text: 'AI recommends APPROVAL — all coverage checks passed',
-      details: coverage.map(r => r.message || r.reason || r.rule_name),
+      text: `AI recommends APPROVAL — ${report.reasoning?.substring(0, 100) || 'all checks passed'}`,
+      details: (report.rule_checks || []).map(r => `${r.rule}: ${r.status} — ${r.detail}`),
+      report,
+    }
+  }
+  if (rec.includes('reject')) {
+    return {
+      type: 'reject',
+      text: `AI recommends REJECTION — ${report.reasoning?.substring(0, 100) || 'issues found'}`,
+      details: (report.red_flags || []),
+      report,
     }
   }
 
   return {
     type: 'review',
-    text: `AI flags ${failedRules.length} issue(s) for review`,
-    details: failedRules.map(r => r.message || r.reason || r.rule_name),
+    text: `AI suggests FURTHER INVESTIGATION — ${report.reasoning?.substring(0, 100) || 'review needed'}`,
+    details: (report.red_flags || []),
+    report,
   }
 }
 
@@ -357,6 +380,94 @@ function ClaimDetail({ claim, reviewId, onRefresh, demoMode, onDemoApprove, onDe
           )}
         </div>
       </div>
+
+      {/* AI Analysis Detail Section */}
+      {aiRec.report && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
+          <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+            <Zap className="w-4 h-4 text-purple-500" />
+            AI Analysis Report
+          </h3>
+
+          {/* Document Review */}
+          {(aiRec.report.document_review || []).length > 0 && (
+            <div>
+              <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Document Review</h4>
+              <div className="space-y-1.5">
+                {aiRec.report.document_review.map((doc, i) => (
+                  <div key={i} className="flex items-center gap-2 py-2 px-3 rounded-lg bg-slate-50 border border-slate-100">
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                      doc.status === 'Found' ? 'bg-green-100 text-green-700' :
+                      doc.status === 'Missing' ? 'bg-red-100 text-red-700' :
+                      'bg-amber-100 text-amber-700'
+                    }`}>{doc.status}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] font-medium text-slate-700">{doc.document}</p>
+                      <p className="text-[10px] text-slate-500 truncate">{doc.findings}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Rule Checks */}
+          {(aiRec.report.rule_checks || []).length > 0 && (
+            <div>
+              <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Policy Rule Checks</h4>
+              <div className="space-y-1.5">
+                {aiRec.report.rule_checks.map((rule, i) => (
+                  <div key={i} className="flex items-start gap-2 py-2 px-3 rounded-lg bg-slate-50 border border-slate-100">
+                    <span className={`shrink-0 mt-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                      rule.status === 'PASS' ? 'bg-green-100 text-green-700' :
+                      rule.status === 'FAIL' ? 'bg-red-100 text-red-700' :
+                      'bg-amber-100 text-amber-700'
+                    }`}>{rule.status}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] font-medium text-slate-700">{rule.rule}</p>
+                      <p className="text-[10px] text-slate-500">{rule.detail}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Red Flags */}
+          {(aiRec.report.red_flags || []).length > 0 && (
+            <div>
+              <h4 className="text-[10px] font-bold text-red-500 uppercase tracking-wider mb-2">⚠ Red Flags</h4>
+              <div className="space-y-1">
+                {aiRec.report.red_flags.map((flag, i) => (
+                  <div key={i} className="flex items-start gap-2 py-1.5 px-3 rounded-lg bg-red-50 border border-red-100">
+                    <AlertTriangle className="w-3 h-3 text-red-500 shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-red-700">{flag}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Reasoning */}
+          {aiRec.report.reasoning && (
+            <div>
+              <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">AI Reasoning</h4>
+              <p className="text-xs text-slate-700 bg-slate-50 rounded-lg p-3 border border-slate-100 leading-relaxed">
+                {aiRec.report.reasoning}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* AI Analysis Loading State */}
+      {aiRec.type === 'pending' && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 text-center">
+          <Loader2 className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-3" />
+          <p className="text-sm font-semibold text-slate-600">AI analysis in progress…</p>
+          <p className="text-xs text-slate-400 mt-1">This may take a moment</p>
+        </div>
+      )}
 
       {/* ICD Codes */}
       {(m2.code_results || []).length > 0 && (
