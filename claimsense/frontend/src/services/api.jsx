@@ -78,11 +78,11 @@ export const fetchReviewQueue = () =>
 export const fetchReviewContext = (reviewId) =>
   api.get(`/review/${reviewId}`)
 
-export const approveReview = (reviewId, notes) =>
+export const approveReview = (reviewId, notes = '') =>
   api.post(`/review/${reviewId}/approve`, { notes })
 
-export const rejectReview = (reviewId, notes, reason) =>
-  api.post(`/review/${reviewId}/reject`, { notes, reason })
+export const rejectReview = (reviewId, denialReason, notes = '') =>
+  api.post(`/review/${reviewId}/reject`, { denial_reason: denialReason, notes })
 
 // ── M3 Submission ─────────────────────────────────────────────────────────────
 

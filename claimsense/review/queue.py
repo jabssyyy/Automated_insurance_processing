@@ -227,6 +227,9 @@ async def approve_claim(
 
     if not item:
         raise ValueError(f"Review item #{review_id} not found")
+
+    if item.status != ReviewStatus.PENDING.value:
+        raise ValueError(
             f"Review item #{review_id} is already {item.status} — cannot approve"
         )
 

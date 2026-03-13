@@ -82,14 +82,14 @@ class ReviewContextResponse(BaseModel):
 class ApproveRequest(BaseModel):
     """Payload for approving a review item."""
     notes: Optional[str] = None
-    reviewer_id: int
+    reviewer_id: int = 0
 
 
 class RejectRequest(BaseModel):
     """Payload for rejecting a review item."""
     notes: Optional[str] = None
     denial_reason: str
-    reviewer_id: int
+    reviewer_id: int = 0
 
 
 class ReviewDecisionResponse(BaseModel):
@@ -407,13 +407,13 @@ async def reject_review(
         notification = Notification(
             claim_id=item.claim_id,
             user_id=_get_patient_id_from_claim(db, item.claim_id),
-            channel=NotificationChannel.IN_APP,
+            channel=NotificationChannel.IN_APP.value if hasattr(NotificationChannel.IN_APP, 'value') else 'in_app',
             message=(
                 f"Your claim {item.claim_id} has been denied. "
                 f"Reason: {body.denial_reason}. "
                 f"Please contact your insurer for more details."
             ),
-            delivery_status=DeliveryStatus.SENT,
+            delivery_status=DeliveryStatus.SENT.value if hasattr(DeliveryStatus.SENT, 'value') else 'sent',
             sent_at=datetime.now(timezone.utc),
         )
         db.add(notification)

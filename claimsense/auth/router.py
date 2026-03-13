@@ -24,7 +24,7 @@ from auth.jwt_handler import create_access_token
 from auth.rbac import get_current_user
 
 router = APIRouter()
-pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_ctx = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
 
 
 # ── Request schemas (local, not worth adding to shared) ──────────────

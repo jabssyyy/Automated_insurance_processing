@@ -28,7 +28,7 @@ logger = logging.getLogger("claimsense")
 logging.basicConfig(level=logging.INFO)
 
 settings = get_settings()
-pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_ctx = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -61,19 +61,19 @@ async def _seed_demo_users() -> None:
             User(
                 email="demo_patient@claimsense.ai",
                 hashed_password=pwd_ctx.hash("demo1234"),
-                role=UserRole.PATIENT,
+                role=UserRole.PATIENT.value,
                 phone=settings.DEMO_PATIENT_PHONE,
             ),
             User(
                 email="demo_hospital@claimsense.ai",
                 hashed_password=pwd_ctx.hash("demo1234"),
-                role=UserRole.HOSPITAL_STAFF,
+                role=UserRole.HOSPITAL_STAFF.value,
                 hospital_id="HOSP-KIT-001",
             ),
             User(
                 email="demo_insurer@claimsense.ai",
                 hashed_password=pwd_ctx.hash("demo1234"),
-                role=UserRole.INSURER,
+                role=UserRole.INSURER.value,
                 insurer_id="INS-STAR-001",
             ),
         ]
