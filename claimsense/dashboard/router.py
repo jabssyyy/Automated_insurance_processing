@@ -23,7 +23,7 @@ from sse_starlette.sse import EventSourceResponse
 from auth.jwt_handler import verify_token
 from auth.rbac import require_role
 from shared.database import get_db
-from shared.models import Claim, ClaimStatus
+from shared.models import Claim, ClaimStatus, User
 from shared.sse import sse_manager
 
 from dashboard.status import get_active_claims, get_claim_timeline
@@ -175,9 +175,15 @@ async def create_claim(
     if isinstance(user_id, str):
         user_id = int(user_id)
 
+    # Fetch user to get hospital_id if they are hospital staff
+    user_result = await db.execute(select(User).where(User.id == user_id))
+    user = user_result.scalar_one_or_none()
+    hospital_id = user.hospital_id if user else None
+
     claim = Claim(
         id=claim_id,
-        patient_id=user_id,
+        patient_id=user_id, # For simplicity in demo, creator acts as patient_id
+        hospital_id=hospital_id,
         claim_type=body.claim_type,
         path=body.path,
         policy_number=body.policy_number,
